@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Papa from 'papaparse';
 
-const STORAGE_KEY = 'escarlate-finder-v1';
+const STORAGE_KEY = 'escarlate-finder-v2';
+const STORAGE_KEY_PHONES = 'escarlate-finder-phones-v1';
 
 const FIELD_DEFS = [
   { key: 'name', label: 'Nome / Empresa', icon: '🏷️' },
@@ -62,18 +63,18 @@ function extractPhoneDigits(raw) {
   return s.replace(/\D/g, '');
 }
 
-function buildWhatsApp(rawPhone, message) {
-  if (!hasValue(rawPhone)) return null;
-  let digits = extractPhoneDigits(rawPhone).replace(/^0+/, '');
-  if (!digits) return null;
-  if (!digits.startsWith('55') || digits.length < 12) digits = '55' + digits;
+// Normaliza para comparação (chave canônica): só dígitos com DDI 55
+function normalizePhone(raw) {
+  if (!raw) return '';
+  const digits = extractPhoneDigits(raw).replace(/^0+/, '');
+  if (digits.length < 10) return '';
+  if (digits.startsWith('55') && digits.length >= 12) return digits;
+  return '55' + digits;
+}
 
-  const text = (message || '').trim();
-  if (text) {
-    return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
-  }
-  const raw = String(rawPhone).trim();
-  if (URL_RE.test(raw) && WA_URL_RE.test(raw)) return raw;
+function buildWhatsApp(rawPhone) {
+  const digits = normalizePhone(rawPhone);
+  if (!digits) return null;
   return `https://wa.me/${digits}`;
 }
 
@@ -122,7 +123,7 @@ function downloadFile(filename, content) {
   URL.revokeObjectURL(url);
 }
 
-/* -------- detecção (por cabeçalho + por conteúdo) -------- */
+/* -------- detecção automática -------- */
 
 function detectMapping(headers, rows) {
   const sample = rows.slice(0, 20);
@@ -145,23 +146,19 @@ function detectMapping(headers, rows) {
     return '';
   };
 
-  // ---- WhatsApp / Telefone ----
   let phone = byName(
     'whatsapp', 'whats', 'telefone', 'phone', 'celular', 'fone', 'tel', 'contato', 'numero', 'mobile'
   );
   if (!phone) phone = byContent((v) => WA_URL_RE.test(v));
 
-  // ---- Instagram ----
   let instagram = byName('instagram', 'insta', 'ig');
   if (!instagram) {
     instagram = byContent((v) => IG_URL_RE.test(v) || /^@[a-zA-Z0-9._]{2,}$/.test(v));
   }
 
-  // ---- E-mail ----
   let email = byName('email', 'e mail', 'mail');
   if (!email) email = byContent((v) => EMAIL_RE.test(v));
 
-  // ---- Site ----
   let website = byName('website', 'site', 'dominio', 'homepage');
   if (!website) {
     const cand = byName('url', 'link');
@@ -171,9 +168,7 @@ function detectMapping(headers, rows) {
     }
   }
 
-  // ---- Perfil (URL que não é whatsapp, instagram nem imagem) ----
-  let profile = '';
-  profile = byContent(
+  let profile = byContent(
     (v) =>
       URL_RE.test(v) &&
       !WA_URL_RE.test(v) &&
@@ -182,7 +177,6 @@ function detectMapping(headers, rows) {
       !IMG_HOST_RE.test(v)
   );
 
-  // ---- Nome ----
   let name = byName(
     'nome', 'name', 'empresa', 'cliente', 'negocio', 'business',
     'titulo', 'title', 'razao social', 'estabelecimento', 'fantasia'
@@ -194,20 +188,18 @@ function detectMapping(headers, rows) {
       if (v.includes('@')) return false;
       if (/^\d+$/.test(v)) return false;
       if (!/[a-zA-ZÀ-ÿ]/.test(v)) return false;
-      if (/\d/.test(v)) return false; // evita "24 anos"
+      if (/\d/.test(v)) return false;
       const words = v.split(/\s+/).filter(Boolean);
       if (words.length > 6) return false;
-      if (words.every((w) => w.length <= 1)) return false; // evita iniciais
+      if (words.every((w) => w.length <= 1)) return false;
       return true;
     }, 0.7);
   }
 
-  // ---- Categoria ----
   let category = byName(
     'categoria', 'segmento', 'nicho', 'ramo', 'tipo', 'category', 'industry', 'servico', 'serviço'
   );
 
-  // ---- Endereço ----
   let address = byName(
     'endereco', 'address', 'cidade', 'bairro', 'local', 'city', 'location', 'regiao'
   );
@@ -225,11 +217,12 @@ export default function Page() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState({});
-  const [waMessage, setWaMessage] = useState('');
   const [showMapping, setShowMapping] = useState(false);
   const [openNote, setOpenNote] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
+  const [seenPhones, setSeenPhones] = useState({});
+  const [importNotice, setImportNotice] = useState('');
 
   const fileInputRef = useRef(null);
   const storageLoaded = useRef(false);
@@ -241,7 +234,11 @@ export default function Page() {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.status) setStatus(parsed.status);
-        if (typeof parsed.waMessage === 'string') setWaMessage(parsed.waMessage);
+      }
+      const rawPhones = window.localStorage.getItem(STORAGE_KEY_PHONES);
+      if (rawPhones) {
+        const parsed = JSON.parse(rawPhones);
+        if (parsed && typeof parsed === 'object') setSeenPhones(parsed);
       }
     } catch {}
     storageLoaded.current = true;
@@ -250,38 +247,75 @@ export default function Page() {
   useEffect(() => {
     if (!storageLoaded.current) return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ status, waMessage }));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ status }));
     } catch {}
-  }, [status, waMessage]);
+  }, [status]);
+
+  useEffect(() => {
+    if (!storageLoaded.current) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY_PHONES, JSON.stringify(seenPhones));
+    } catch {}
+  }, [seenPhones]);
 
   /* ---- leitura do CSV ---- */
-  const handleFile = useCallback((file) => {
-    if (!file) return;
-    setError('');
+  const handleFile = useCallback(
+    (file) => {
+      if (!file) return;
+      setError('');
+      setImportNotice('');
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h) => String(h).trim(),
-      complete: (result) => {
-        const fields = (result.meta.fields || []).filter(Boolean);
-        if (!fields.length) {
-          setError('Não consegui identificar colunas nesse arquivo. Verifique se é um CSV válido.');
-          return;
-        }
-        const detected = detectMapping(fields, result.data);
-        setHeaders(fields);
-        setRows(result.data);
-        setMapping(detected);
-        setFileName(file.name);
-        setFilter('all');
-        setSearch('');
-        // Se não achou nome ou telefone, abre o mapeamento automaticamente
-        setShowMapping(!detected.name || !detected.phone);
-      },
-      error: (err) => setError('Erro ao ler o CSV: ' + err.message),
-    });
-  }, []);
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: (h) => String(h).trim(),
+        complete: (result) => {
+          const fields = (result.meta.fields || []).filter(Boolean);
+          if (!fields.length) {
+            setError('Não consegui identificar colunas nesse arquivo. Verifique se é um CSV válido.');
+            return;
+          }
+
+          const detected = detectMapping(fields, result.data);
+          const phoneCol = detected.phone;
+
+          // Filtra repetidos com base no histórico de telefones
+          const kept = [];
+          const newPhones = {};
+          let removed = 0;
+
+          for (const row of result.data) {
+            const rawPhone = phoneCol ? String(row[phoneCol] ?? '').trim() : '';
+            const key = normalizePhone(rawPhone);
+
+            if (key && seenPhones[key]) {
+              removed++;
+              continue;
+            }
+            if (key) newPhones[key] = Date.now();
+            kept.push(row);
+          }
+
+          setHeaders(fields);
+          setRows(kept);
+          setMapping(detected);
+          setFileName(file.name);
+          setFilter('all');
+          setSearch('');
+          setShowMapping(!detected.name || !detected.phone);
+          setSeenPhones((prev) => ({ ...prev, ...newPhones }));
+
+          if (removed > 0) {
+            setImportNotice(
+              `${removed} lead(s) repetido(s) já no histórico foram removidos automaticamente.`
+            );
+          }
+        },
+        error: (err) => setError('Erro ao ler o CSV: ' + err.message),
+      });
+    },
+    [seenPhones]
+  );
 
   /* ---- leads processados ---- */
   const leads = useMemo(() => {
@@ -307,6 +341,7 @@ export default function Page() {
         name: name || formatPhone(phone) || `Lead ${index + 1}`,
         phone,
         phoneDisplay: formatPhone(phone),
+        phoneKey: normalizePhone(phone),
         email,
         category,
         address,
@@ -314,14 +349,14 @@ export default function Page() {
         website,
         profile,
         hasWebsite: hasValue(website),
-        whatsapp: buildWhatsApp(phone, waMessage),
+        whatsapp: buildWhatsApp(phone),
         instagramUrl: buildInstagram(instagram),
         handle: instagramHandle(instagram),
         siteUrl: buildUrl(website),
         profileUrl: buildUrl(profile),
       };
     });
-  }, [rows, mapping, waMessage]);
+  }, [rows, mapping]);
 
   /* ---- filtros ---- */
   const counts = useMemo(() => {
@@ -368,8 +403,8 @@ export default function Page() {
     setStatus((prev) => ({ ...prev, [id]: { ...prev[id], note } }));
   }, []);
 
-  const clearAll = useCallback(() => {
-    if (!window.confirm('Isso vai remover o CSV carregado e todos os status/anotações. Continuar?')) return;
+  const clearCurrent = useCallback(() => {
+    if (!window.confirm('Isso vai remover o CSV carregado e todos os status/anotações desta sessão. O histórico de telefones será mantido. Continuar?')) return;
     setRows([]);
     setHeaders([]);
     setMapping({});
@@ -377,10 +412,26 @@ export default function Page() {
     setStatus({});
     setOpenNote(null);
     setError('');
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    setImportNotice('');
   }, []);
+
+  const clearHistory = useCallback(() => {
+    const n = Object.keys(seenPhones).length;
+    if (n === 0) {
+      window.alert('O histórico de telefones já está vazio.');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Isso vai apagar o histórico de ${n} telefone(s) já vistos. Depois disso, leads repetidos em novos CSVs NÃO serão removidos automaticamente. Continuar?`
+      )
+    )
+      return;
+    setSeenPhones({});
+    try {
+      window.localStorage.removeItem(STORAGE_KEY_PHONES);
+    } catch {}
+  }, [seenPhones]);
 
   const exportCsv = useCallback(() => {
     const data = filtered.map((l) => ({
@@ -401,6 +452,8 @@ export default function Page() {
     const stamp = new Date().toISOString().slice(0, 10);
     downloadFile(`escarlate-leads-${stamp}.csv`, csv);
   }, [filtered, status]);
+
+  const historyCount = Object.keys(seenPhones).length;
 
   /* ---- render ---- */
   return (
@@ -423,11 +476,18 @@ export default function Page() {
               <button className="btn-ghost" onClick={exportCsv}>
                 Exportar CSV
               </button>
-              <button className="btn-ghost danger" onClick={clearAll}>
+              <button className="btn-ghost danger" onClick={clearCurrent}>
                 Limpar
               </button>
             </>
           )}
+          <button
+            className="btn-ghost"
+            onClick={clearHistory}
+            title="Telefones já vistos em CSVs anteriores. Clique para zerar."
+          >
+            Histórico ({historyCount})
+          </button>
         </div>
       </header>
 
@@ -441,6 +501,15 @@ export default function Page() {
           e.target.value = '';
         }}
       />
+
+      {importNotice && (
+        <div className="notice">
+          <span>♻️ {importNotice}</span>
+          <button className="notice-close" onClick={() => setImportNotice('')} aria-label="Fechar">
+            ×
+          </button>
+        </div>
+      )}
 
       {leads.length === 0 ? (
         <section className="empty">
@@ -462,10 +531,15 @@ export default function Page() {
             <h2>Arraste seu arquivo CSV aqui</h2>
             <p>ou clique para selecionar do seu computador</p>
             <span className="dropzone-hint">
-              Detecta automaticamente nome, WhatsApp, Instagram, site, e-mail mesmo com cabeçalhos fora do padrão.
+              Detecta automaticamente nome, WhatsApp, Instagram, site e e-mail — e já descarta leads com telefone repetido.
             </span>
           </div>
           {error && <p className="error">{error}</p>}
+          {historyCount > 0 && (
+            <p className="dropzone-hint" style={{ marginTop: 18 }}>
+              📇 Você tem <strong>{historyCount}</strong> telefone(s) no histórico.
+            </p>
+          )}
         </section>
       ) : (
         <>
@@ -508,17 +582,6 @@ export default function Page() {
                   </button>
                 ))}
               </div>
-            </div>
-
-            <div className="toolbar-row">
-              <label className="field-inline">
-                <span>Mensagem inicial do WhatsApp</span>
-                <input
-                  value={waMessage}
-                  onChange={(e) => setWaMessage(e.target.value)}
-                  placeholder="Ex: Olá! Vi seu perfil e queria conversar sobre uma proposta rápida."
-                />
-              </label>
               <button className="btn-ghost" onClick={() => setShowMapping((v) => !v)}>
                 {showMapping ? 'Fechar colunas' : 'Mapear colunas'}
               </button>
@@ -561,13 +624,20 @@ export default function Page() {
 
             {filtered.map((lead) => {
               const st = status[lead.id] || {};
+              const contacted = !!st.contacted;
               return (
-                <article key={lead.id} className={`card ${lead.hasWebsite ? '' : 'no-site'}`}>
+                <article
+                  key={lead.id}
+                  className={`card ${lead.hasWebsite ? '' : 'no-site'} ${contacted ? 'contacted' : ''}`}
+                >
                   <div className="card-top">
                     <h3 className="card-title">{lead.name}</h3>
-                    <span className={`badge ${lead.hasWebsite ? 'badge-ok' : 'badge-alert'}`}>
-                      {lead.hasWebsite ? 'Com site' : 'Sem site'}
-                    </span>
+                    <div className="card-badges">
+                      {contacted && <span className="badge badge-contacted">✓ Contatado</span>}
+                      <span className={`badge ${lead.hasWebsite ? 'badge-ok' : 'badge-alert'}`}>
+                        {lead.hasWebsite ? 'Com site' : 'Sem site'}
+                      </span>
+                    </div>
                   </div>
 
                   {lead.category && <span className="chip">{lead.category}</span>}
@@ -643,10 +713,10 @@ export default function Page() {
                     <label className="switch">
                       <input
                         type="checkbox"
-                        checked={!!st.contacted}
+                        checked={contacted}
                         onChange={() => toggleContacted(lead.id)}
                       />
-                      <span>{st.contacted ? 'Contatado' : 'Marcar contatado'}</span>
+                      <span>{contacted ? 'Contatado' : 'Marcar contatado'}</span>
                     </label>
 
                     <button
