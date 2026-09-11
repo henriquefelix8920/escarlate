@@ -10,6 +10,7 @@ const FIELD_DEFS = [
   { key: 'phone', label: 'Telefone / WhatsApp', icon: '📞' },
   { key: 'instagram', label: 'Instagram', icon: '📷' },
   { key: 'website', label: 'Site', icon: '🌐' },
+  { key: 'profile', label: 'Perfil (link)', icon: '🔗' },
   { key: 'email', label: 'E-mail', icon: '✉️' },
   { key: 'category', label: 'Categoria', icon: '📂' },
   { key: 'address', label: 'Endereço / Cidade', icon: '📍' },
@@ -17,7 +18,7 @@ const FIELD_DEFS = [
 
 const EMPTY_VALUES = new Set([
   '', '-', '--', '---', 'n/a', 'na', 'nao', 'não', 'sem site',
-  'sem', 'null', 'undefined', 'none',
+  'sem', 'null', 'undefined', 'none', '|', '·',
 ]);
 
 const FILTERS = [
@@ -28,7 +29,15 @@ const FILTERS = [
   { key: 'contacted', label: 'Contatados' },
 ];
 
-/* ---------------- helpers ---------------- */
+/* -------- regex -------- */
+const WA_URL_RE = /wa\.me\/|api\.whatsapp\.com|whatsapp:\/\//i;
+const IG_URL_RE = /instagram\.com\//i;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const URL_RE = /^https?:\/\//i;
+const IMG_EXT_RE = /\.(jpg|jpeg|png|gif|webp|svg|avif|bmp)(\?|#|$)/i;
+const IMG_HOST_RE = /wsrv\.nl|imgur\.|cloudinary\.|cloudfront\.|convex\.cloud\/api\/storage|images\.|img\./i;
+
+/* -------- helpers -------- */
 
 function hasValue(value) {
   if (value === null || value === undefined) return false;
@@ -37,46 +46,51 @@ function hasValue(value) {
 
 function normalizeHeader(header) {
   return String(header)
+    .replace(/^\ufeff/, '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }
 
-function detectMapping(headers) {
-  const find = (keys) =>
-    headers.find((header) => {
-      const n = normalizeHeader(header);
-      return keys.some((key) => n === key || n.includes(key));
-    }) || '';
-
-  return {
-    name: find(['nome', 'name', 'empresa', 'cliente', 'negocio', 'business', 'titulo']),
-    phone: find(['whatsapp', 'telefone', 'phone', 'celular', 'fone', 'tel', 'contato']),
-    instagram: find(['instagram', 'insta', 'ig']),
-    website: find(['website', 'site', 'url', 'dominio', 'homepage', 'web']),
-    email: find(['email', 'e-mail']),
-    category: find(['categoria', 'segmento', 'nicho', 'ramo', 'tipo', 'category']),
-    address: find(['endereco', 'address', 'cidade', 'bairro', 'local', 'city']),
-  };
+function extractPhoneDigits(raw) {
+  if (!hasValue(raw)) return '';
+  const s = String(raw).trim();
+  const m = s.match(/wa\.me\/(\d+)/i) || s.match(/[?&]phone=(\d+)/i);
+  if (m) return m[1];
+  return s.replace(/\D/g, '');
 }
 
-function buildWhatsApp(phone, message) {
-  if (!hasValue(phone)) return null;
-  let digits = String(phone).replace(/\D/g, '').replace(/^0+/, '');
+function buildWhatsApp(rawPhone, message) {
+  if (!hasValue(rawPhone)) return null;
+  let digits = extractPhoneDigits(rawPhone).replace(/^0+/, '');
   if (!digits) return null;
   if (!digits.startsWith('55') || digits.length < 12) digits = '55' + digits;
-  const base = `https://wa.me/${digits}`;
+
   const text = (message || '').trim();
-  return text ? `${base}?text=${encodeURIComponent(text)}` : base;
+  if (text) {
+    return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+  }
+  const raw = String(rawPhone).trim();
+  if (URL_RE.test(raw) && WA_URL_RE.test(raw)) return raw;
+  return `https://wa.me/${digits}`;
+}
+
+function formatPhone(raw) {
+  const digits = extractPhoneDigits(raw);
+  if (!digits) return '';
+  let d = digits.replace(/^0+/, '');
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2);
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return digits;
 }
 
 function buildInstagram(value) {
   if (!hasValue(value)) return null;
   const raw = String(value).trim();
-  if (/instagram\.com/i.test(raw)) {
-    return /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
-  }
+  if (IG_URL_RE.test(raw)) return URL_RE.test(raw) ? raw : 'https://' + raw;
   const handle = raw.replace(/^@+/, '').replace(/\s+/g, '');
   if (!handle) return null;
   return 'https://instagram.com/' + handle;
@@ -90,10 +104,10 @@ function instagramHandle(value) {
   return s || null;
 }
 
-function buildSite(value) {
+function buildUrl(value) {
   if (!hasValue(value)) return null;
   const s = String(value).trim();
-  return /^https?:\/\//i.test(s) ? s : 'https://' + s;
+  return URL_RE.test(s) ? s : 'https://' + s;
 }
 
 function downloadFile(filename, content) {
@@ -108,7 +122,100 @@ function downloadFile(filename, content) {
   URL.revokeObjectURL(url);
 }
 
-/* ---------------- componente ---------------- */
+/* -------- detecção (por cabeçalho + por conteúdo) -------- */
+
+function detectMapping(headers, rows) {
+  const sample = rows.slice(0, 20);
+  const valuesOf = (h) => sample.map((r) => String(r[h] ?? '').trim()).filter(Boolean);
+
+  const byName = (...keys) => {
+    const norm = headers.map((h) => ({ h, n: normalizeHeader(h) }));
+    for (const { h, n } of norm) if (keys.some((k) => n === k)) return h;
+    for (const { h, n } of norm) if (keys.some((k) => n.includes(k))) return h;
+    return '';
+  };
+
+  const byContent = (test, minRatio = 0.6) => {
+    for (const h of headers) {
+      const vals = valuesOf(h);
+      if (vals.length < 2) continue;
+      const matches = vals.filter(test).length;
+      if (matches / vals.length >= minRatio) return h;
+    }
+    return '';
+  };
+
+  // ---- WhatsApp / Telefone ----
+  let phone = byName(
+    'whatsapp', 'whats', 'telefone', 'phone', 'celular', 'fone', 'tel', 'contato', 'numero', 'mobile'
+  );
+  if (!phone) phone = byContent((v) => WA_URL_RE.test(v));
+
+  // ---- Instagram ----
+  let instagram = byName('instagram', 'insta', 'ig');
+  if (!instagram) {
+    instagram = byContent((v) => IG_URL_RE.test(v) || /^@[a-zA-Z0-9._]{2,}$/.test(v));
+  }
+
+  // ---- E-mail ----
+  let email = byName('email', 'e mail', 'mail');
+  if (!email) email = byContent((v) => EMAIL_RE.test(v));
+
+  // ---- Site ----
+  let website = byName('website', 'site', 'dominio', 'homepage');
+  if (!website) {
+    const cand = byName('url', 'link');
+    if (cand) {
+      const vals = valuesOf(cand);
+      if (vals.length && vals.every((v) => URL_RE.test(v))) website = cand;
+    }
+  }
+
+  // ---- Perfil (URL que não é whatsapp, instagram nem imagem) ----
+  let profile = '';
+  profile = byContent(
+    (v) =>
+      URL_RE.test(v) &&
+      !WA_URL_RE.test(v) &&
+      !IG_URL_RE.test(v) &&
+      !IMG_EXT_RE.test(v) &&
+      !IMG_HOST_RE.test(v)
+  );
+
+  // ---- Nome ----
+  let name = byName(
+    'nome', 'name', 'empresa', 'cliente', 'negocio', 'business',
+    'titulo', 'title', 'razao social', 'estabelecimento', 'fantasia'
+  );
+  if (!name) {
+    name = byContent((v) => {
+      if (v.length < 2 || v.length > 60) return false;
+      if (URL_RE.test(v)) return false;
+      if (v.includes('@')) return false;
+      if (/^\d+$/.test(v)) return false;
+      if (!/[a-zA-ZÀ-ÿ]/.test(v)) return false;
+      if (/\d/.test(v)) return false; // evita "24 anos"
+      const words = v.split(/\s+/).filter(Boolean);
+      if (words.length > 6) return false;
+      if (words.every((w) => w.length <= 1)) return false; // evita iniciais
+      return true;
+    }, 0.7);
+  }
+
+  // ---- Categoria ----
+  let category = byName(
+    'categoria', 'segmento', 'nicho', 'ramo', 'tipo', 'category', 'industry', 'servico', 'serviço'
+  );
+
+  // ---- Endereço ----
+  let address = byName(
+    'endereco', 'address', 'cidade', 'bairro', 'local', 'city', 'location', 'regiao'
+  );
+
+  return { name, phone, instagram, website, email, category, address, profile };
+}
+
+/* -------- componente -------- */
 
 export default function Page() {
   const [rows, setRows] = useState([]);
@@ -136,9 +243,7 @@ export default function Page() {
         if (parsed.status) setStatus(parsed.status);
         if (typeof parsed.waMessage === 'string') setWaMessage(parsed.waMessage);
       }
-    } catch {
-      /* ignora */
-    }
+    } catch {}
     storageLoaded.current = true;
   }, []);
 
@@ -146,9 +251,7 @@ export default function Page() {
     if (!storageLoaded.current) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ status, waMessage }));
-    } catch {
-      /* ignora */
-    }
+    } catch {}
   }, [status, waMessage]);
 
   /* ---- leitura do CSV ---- */
@@ -166,13 +269,15 @@ export default function Page() {
           setError('Não consegui identificar colunas nesse arquivo. Verifique se é um CSV válido.');
           return;
         }
+        const detected = detectMapping(fields, result.data);
         setHeaders(fields);
         setRows(result.data);
-        setMapping(detectMapping(fields));
+        setMapping(detected);
         setFileName(file.name);
         setFilter('all');
         setSearch('');
-        setShowMapping(false);
+        // Se não achou nome ou telefone, abre o mapeamento automaticamente
+        setShowMapping(!detected.name || !detected.phone);
       },
       error: (err) => setError('Erro ao ler o CSV: ' + err.message),
     });
@@ -190,6 +295,7 @@ export default function Page() {
       const email = pick('email');
       const category = pick('category');
       const address = pick('address');
+      const profile = pick('profile');
 
       const id =
         name || phone
@@ -198,18 +304,21 @@ export default function Page() {
 
       return {
         id,
-        name: name || phone || `Lead ${index + 1}`,
+        name: name || formatPhone(phone) || `Lead ${index + 1}`,
         phone,
+        phoneDisplay: formatPhone(phone),
         email,
         category,
         address,
         instagram,
         website,
+        profile,
         hasWebsite: hasValue(website),
         whatsapp: buildWhatsApp(phone, waMessage),
         instagramUrl: buildInstagram(instagram),
         handle: instagramHandle(instagram),
-        siteUrl: buildSite(website),
+        siteUrl: buildUrl(website),
+        profileUrl: buildUrl(profile),
       };
     });
   }, [rows, mapping, waMessage]);
@@ -229,7 +338,6 @@ export default function Page() {
 
   const filtered = useMemo(() => {
     let list = leads;
-
     if (filter === 'no-site') list = list.filter((l) => !l.hasWebsite);
     if (filter === 'with-site') list = list.filter((l) => l.hasWebsite);
     if (filter === 'contacted') list = list.filter((l) => status[l.id]?.contacted);
@@ -238,14 +346,13 @@ export default function Page() {
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter((l) =>
-        [l.name, l.phone, l.email, l.category, l.address, l.instagram, l.handle]
+        [l.name, l.phone, l.phoneDisplay, l.email, l.category, l.address, l.instagram, l.handle, l.website]
           .filter(Boolean)
           .join(' ')
           .toLowerCase()
           .includes(q)
       );
     }
-
     return list;
   }, [leads, filter, search, status]);
 
@@ -272,26 +379,24 @@ export default function Page() {
     setError('');
     try {
       window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignora */
-    }
+    } catch {}
   }, []);
 
   const exportCsv = useCallback(() => {
     const data = filtered.map((l) => ({
       Nome: l.name,
-      Telefone: l.phone,
+      Telefone: l.phoneDisplay || l.phone,
       WhatsApp: l.whatsapp || '',
       Instagram: l.instagramUrl || '',
       Site: l.website,
       TemSite: l.hasWebsite ? 'Sim' : 'Não',
+      Perfil: l.profile,
       Email: l.email,
       Categoria: l.category,
       Endereco: l.address,
       Contatado: status[l.id]?.contacted ? 'Sim' : 'Não',
       Observacao: status[l.id]?.note || '',
     }));
-
     const csv = Papa.unparse(data);
     const stamp = new Date().toISOString().slice(0, 10);
     downloadFile(`escarlate-leads-${stamp}.csv`, csv);
@@ -305,7 +410,7 @@ export default function Page() {
           <div className="brand-mark">EF</div>
           <div className="brand-text">
             <h1>Escarlate Finder</h1>
-            <span>Prospecção de leads para venda de sites</span>
+            <span>{fileName ? `Arquivo: ${fileName}` : 'Prospecção de leads para venda de sites'}</span>
           </div>
         </div>
 
@@ -357,7 +462,7 @@ export default function Page() {
             <h2>Arraste seu arquivo CSV aqui</h2>
             <p>ou clique para selecionar do seu computador</p>
             <span className="dropzone-hint">
-              Funciona com exportações do Google Maps, planilhas, scraping de Instagram e etc.
+              Detecta automaticamente nome, WhatsApp, Instagram, site, e-mail mesmo com cabeçalhos fora do padrão.
             </span>
           </div>
           {error && <p className="error">{error}</p>}
@@ -411,7 +516,7 @@ export default function Page() {
                 <input
                   value={waMessage}
                   onChange={(e) => setWaMessage(e.target.value)}
-                  placeholder="Ex: Olá! Vi que seu negócio ainda não tem site. Posso te mostrar uma proposta rápida?"
+                  placeholder="Ex: Olá! Vi seu perfil e queria conversar sobre uma proposta rápida."
                 />
               </label>
               <button className="btn-ghost" onClick={() => setShowMapping((v) => !v)}>
@@ -423,7 +528,8 @@ export default function Page() {
           {showMapping && (
             <section className="mapping">
               <p className="mapping-hint">
-                Arquivo: <strong>{fileName}</strong> — diga qual coluna do CSV corresponde a cada informação.
+                Dica: se algum campo estiver errado, escolha a coluna correta aqui. A ferramenta já tentou adivinhar
+                pelo cabeçalho e pelo conteúdo.
               </p>
               <div className="mapping-grid">
                 {FIELD_DEFS.map((f) => (
@@ -467,10 +573,10 @@ export default function Page() {
                   {lead.category && <span className="chip">{lead.category}</span>}
 
                   <ul className="card-meta">
-                    {lead.phone && (
+                    {lead.phoneDisplay && (
                       <li>
                         <span className="meta-icon">📞</span>
-                        <span>{lead.phone}</span>
+                        <span>{lead.phoneDisplay}</span>
                       </li>
                     )}
                     {lead.handle && (
@@ -517,6 +623,12 @@ export default function Page() {
                     {lead.siteUrl && (
                       <a className="btn btn-site" href={lead.siteUrl} target="_blank" rel="noreferrer">
                         Ver site
+                      </a>
+                    )}
+
+                    {lead.profileUrl && (
+                      <a className="btn" href={lead.profileUrl} target="_blank" rel="noreferrer">
+                        🔗 Perfil
                       </a>
                     )}
 
