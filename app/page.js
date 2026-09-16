@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Papa from 'papaparse';
 
-const STORAGE_KEY = 'escarlate-finder-v2';
+const STORAGE_KEY = 'escarlate-finder-v3';
 const STORAGE_KEY_PHONES = 'escarlate-finder-phones-v1';
 
 const FIELD_DEFS = [
@@ -63,7 +63,6 @@ function extractPhoneDigits(raw) {
   return s.replace(/\D/g, '');
 }
 
-// Normaliza para comparação (chave canônica): só dígitos com DDI 55
 function normalizePhone(raw) {
   if (!raw) return '';
   const digits = extractPhoneDigits(raw).replace(/^0+/, '');
@@ -207,13 +206,51 @@ function detectMapping(headers, rows) {
   return { name, phone, instagram, website, email, category, address, profile };
 }
 
+/* -------- transforma uma linha crua em lead -------- */
+
+function processRow(row, index, mapping, sourceId, sourceName) {
+  const pick = (key) => (mapping[key] ? String(row[mapping[key]] ?? '').trim() : '');
+
+  const name = pick('name');
+  const phone = pick('phone');
+  const instagram = pick('instagram');
+  const website = pick('website');
+  const email = pick('email');
+  const category = pick('category');
+  const address = pick('address');
+  const profile = pick('profile');
+
+  const phoneKey = normalizePhone(phone);
+  const id = phoneKey || `${sourceId}::${index}`;
+
+  return {
+    id,
+    sourceId,
+    sourceName,
+    name: name || formatPhone(phone) || `Lead ${index + 1}`,
+    phone,
+    phoneDisplay: formatPhone(phone),
+    phoneKey,
+    email,
+    category,
+    address,
+    instagram,
+    website,
+    profile,
+    hasWebsite: hasValue(website),
+    whatsapp: buildWhatsApp(phone),
+    instagramUrl: buildInstagram(instagram),
+    handle: instagramHandle(instagram),
+    siteUrl: buildUrl(website),
+    profileUrl: buildUrl(profile),
+  };
+}
+
 /* -------- componente -------- */
 
 export default function Page() {
-  const [rows, setRows] = useState([]);
-  const [headers, setHeaders] = useState([]);
-  const [mapping, setMapping] = useState({});
-  const [fileName, setFileName] = useState('');
+  const [sources, setSources] = useState([]); // [{ id, fileName, headers, rows, mapping }]
+  const [activeSourceId, setActiveSourceId] = useState(null);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState({});
@@ -258,105 +295,104 @@ export default function Page() {
     } catch {}
   }, [seenPhones]);
 
-  /* ---- leitura do CSV ---- */
-  const handleFile = useCallback(
-    (file) => {
-      if (!file) return;
+  /* ---- leitura dos CSVs ---- */
+  const handleFiles = useCallback(
+    async (files) => {
+      const fileList = Array.from(files || []);
+      if (!fileList.length) return;
       setError('');
       setImportNotice('');
 
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        transformHeader: (h) => String(h).trim(),
-        complete: (result) => {
+      try {
+        const parsed = await Promise.all(
+          fileList.map(
+            (file) =>
+              new Promise((resolve, reject) => {
+                Papa.parse(file, {
+                  header: true,
+                  skipEmptyLines: true,
+                  transformHeader: (h) => String(h).replace(/^\ufeff/, '').trim(),
+                  complete: (r) => resolve({ file, result: r }),
+                  error: (e) => reject(e),
+                });
+              })
+          )
+        );
+
+        let removed = 0;
+        const nextSeen = { ...seenPhones };
+        const nextSources = [];
+        let needMapping = false;
+        let ignoredFiles = 0;
+
+        for (const { file, result } of parsed) {
           const fields = (result.meta.fields || []).filter(Boolean);
           if (!fields.length) {
-            setError('Não consegui identificar colunas nesse arquivo. Verifique se é um CSV válido.');
-            return;
+            ignoredFiles++;
+            continue;
           }
 
           const detected = detectMapping(fields, result.data);
           const phoneCol = detected.phone;
 
-          // Filtra repetidos com base no histórico de telefones
-          const kept = [];
-          const newPhones = {};
-          let removed = 0;
-
+          const keptRows = [];
           for (const row of result.data) {
             const rawPhone = phoneCol ? String(row[phoneCol] ?? '').trim() : '';
             const key = normalizePhone(rawPhone);
-
-            if (key && seenPhones[key]) {
+            if (key && nextSeen[key]) {
               removed++;
               continue;
             }
-            if (key) newPhones[key] = Date.now();
-            kept.push(row);
+            if (key) nextSeen[key] = Date.now();
+            keptRows.push(row);
           }
 
-          setHeaders(fields);
-          setRows(kept);
-          setMapping(detected);
-          setFileName(file.name);
-          setFilter('all');
-          setSearch('');
-          setShowMapping(!detected.name || !detected.phone);
-          setSeenPhones((prev) => ({ ...prev, ...newPhones }));
+          nextSources.push({
+            id: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            fileName: file.name,
+            headers: fields,
+            rows: keptRows,
+            mapping: detected,
+          });
 
-          if (removed > 0) {
-            setImportNotice(
-              `${removed} lead(s) repetido(s) já no histórico foram removidos automaticamente.`
-            );
-          }
-        },
-        error: (err) => setError('Erro ao ler o CSV: ' + err.message),
-      });
+          if (!detected.name || !detected.phone) needMapping = true;
+        }
+
+        if (!nextSources.length) {
+          setError('Nenhum arquivo CSV válido foi encontrado.');
+          return;
+        }
+
+        setSources(nextSources);
+        setActiveSourceId(nextSources[0].id);
+        setSeenPhones(nextSeen);
+        setStatus({});
+        setOpenNote(null);
+        setFilter('all');
+        setSearch('');
+        setShowMapping(needMapping);
+
+        const bits = [];
+        if (removed > 0) bits.push(`${removed} lead(s) repetido(s) removido(s) pelo histórico`);
+        if (ignoredFiles > 0) bits.push(`${ignoredFiles} arquivo(s) ignorado(s) (sem colunas)`);
+        if (bits.length) setImportNotice(bits.join(' · ') + '.');
+      } catch (err) {
+        setError('Erro ao ler arquivo(s): ' + (err?.message || err));
+      }
     },
     [seenPhones]
   );
 
-  /* ---- leads processados ---- */
+  /* ---- leads consolidados (todos os arquivos) ---- */
   const leads = useMemo(() => {
-    return rows.map((row, index) => {
-      const pick = (key) => (mapping[key] ? String(row[mapping[key]] ?? '').trim() : '');
-
-      const name = pick('name');
-      const phone = pick('phone');
-      const instagram = pick('instagram');
-      const website = pick('website');
-      const email = pick('email');
-      const category = pick('category');
-      const address = pick('address');
-      const profile = pick('profile');
-
-      const id =
-        name || phone
-          ? `${name}|${phone}`.toLowerCase().replace(/\s+/g, '')
-          : `linha-${index}`;
-
-      return {
-        id,
-        name: name || formatPhone(phone) || `Lead ${index + 1}`,
-        phone,
-        phoneDisplay: formatPhone(phone),
-        phoneKey: normalizePhone(phone),
-        email,
-        category,
-        address,
-        instagram,
-        website,
-        profile,
-        hasWebsite: hasValue(website),
-        whatsapp: buildWhatsApp(phone),
-        instagramUrl: buildInstagram(instagram),
-        handle: instagramHandle(instagram),
-        siteUrl: buildUrl(website),
-        profileUrl: buildUrl(profile),
-      };
-    });
-  }, [rows, mapping]);
+    const out = [];
+    for (const source of sources) {
+      source.rows.forEach((row, index) => {
+        out.push(processRow(row, index, source.mapping, source.id, source.fileName));
+      });
+    }
+    return out;
+  }, [sources]);
 
   /* ---- filtros ---- */
   const counts = useMemo(() => {
@@ -403,12 +439,21 @@ export default function Page() {
     setStatus((prev) => ({ ...prev, [id]: { ...prev[id], note } }));
   }, []);
 
+  const updateMapping = useCallback((sourceId, key, value) => {
+    setSources((prev) =>
+      prev.map((s) => (s.id === sourceId ? { ...s, mapping: { ...s.mapping, [key]: value } } : s))
+    );
+  }, []);
+
   const clearCurrent = useCallback(() => {
-    if (!window.confirm('Isso vai remover o CSV carregado e todos os status/anotações desta sessão. O histórico de telefones será mantido. Continuar?')) return;
-    setRows([]);
-    setHeaders([]);
-    setMapping({});
-    setFileName('');
+    if (
+      !window.confirm(
+        'Isso vai remover os CSVs carregados e todos os status/anotações desta sessão. O histórico de telefones será mantido. Continuar?'
+      )
+    )
+      return;
+    setSources([]);
+    setActiveSourceId(null);
     setStatus({});
     setOpenNote(null);
     setError('');
@@ -445,6 +490,7 @@ export default function Page() {
       Email: l.email,
       Categoria: l.category,
       Endereco: l.address,
+      Arquivo: l.sourceName,
       Contatado: status[l.id]?.contacted ? 'Sim' : 'Não',
       Observacao: status[l.id]?.note || '',
     }));
@@ -454,6 +500,8 @@ export default function Page() {
   }, [filtered, status]);
 
   const historyCount = Object.keys(seenPhones).length;
+  const activeSource = sources.find((s) => s.id === activeSourceId) || sources[0];
+  const showSourceTag = sources.length > 1;
 
   /* ---- render ---- */
   return (
@@ -463,7 +511,11 @@ export default function Page() {
           <div className="brand-mark">EF</div>
           <div className="brand-text">
             <h1>Escarlate Finder</h1>
-            <span>{fileName ? `Arquivo: ${fileName}` : 'Prospecção de leads para venda de sites'}</span>
+            <span>
+              {sources.length === 0 && 'Prospecção de leads para venda de sites'}
+              {sources.length === 1 && `Arquivo: ${sources[0].fileName}`}
+              {sources.length > 1 && `${sources.length} arquivos carregados`}
+            </span>
           </div>
         </div>
 
@@ -471,7 +523,7 @@ export default function Page() {
           {leads.length > 0 && (
             <>
               <button className="btn-ghost" onClick={() => fileInputRef.current?.click()}>
-                Trocar CSV
+                Trocar CSVs
               </button>
               <button className="btn-ghost" onClick={exportCsv}>
                 Exportar CSV
@@ -495,9 +547,10 @@ export default function Page() {
         ref={fileInputRef}
         type="file"
         accept=".csv,text/csv"
+        multiple
         hidden
         onChange={(e) => {
-          handleFile(e.target.files?.[0]);
+          handleFiles(e.target.files);
           e.target.value = '';
         }}
       />
@@ -523,15 +576,15 @@ export default function Page() {
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              handleFile(e.dataTransfer.files?.[0]);
+              handleFiles(e.dataTransfer.files);
             }}
             onClick={() => fileInputRef.current?.click()}
           >
             <div className="dropzone-icon">📄</div>
-            <h2>Arraste seu arquivo CSV aqui</h2>
+            <h2>Arraste um ou mais CSVs aqui</h2>
             <p>ou clique para selecionar do seu computador</p>
             <span className="dropzone-hint">
-              Detecta automaticamente nome, WhatsApp, Instagram, site e e-mail — e já descarta leads com telefone repetido.
+              Cada arquivo pode ter colunas diferentes — a Escarlate detecta automaticamente. Leads com telefone repetido são descartados.
             </span>
           </div>
           {error && <p className="error">{error}</p>}
@@ -588,12 +641,28 @@ export default function Page() {
             </div>
           </section>
 
-          {showMapping && (
+          {showMapping && activeSource && (
             <section className="mapping">
+              {sources.length > 1 && (
+                <div className="mapping-source-tabs">
+                  {sources.map((s) => (
+                    <button
+                      key={s.id}
+                      className={`source-tab ${s.id === activeSourceId ? 'active' : ''}`}
+                      onClick={() => setActiveSourceId(s.id)}
+                    >
+                      {s.fileName}
+                      <span className="source-count">{s.rows.length}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <p className="mapping-hint">
-                Dica: se algum campo estiver errado, escolha a coluna correta aqui. A ferramenta já tentou adivinhar
-                pelo cabeçalho e pelo conteúdo.
+                Ajustando: <strong>{activeSource.fileName}</strong> — se algum campo estiver errado, escolha a coluna
+                correta aqui. A ferramenta já tentou adivinhar pelo cabeçalho e pelo conteúdo.
               </p>
+
               <div className="mapping-grid">
                 {FIELD_DEFS.map((f) => (
                   <label key={f.key} className="mapping-item">
@@ -601,11 +670,11 @@ export default function Page() {
                       {f.icon} {f.label}
                     </span>
                     <select
-                      value={mapping[f.key] || ''}
-                      onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}
+                      value={activeSource.mapping[f.key] || ''}
+                      onChange={(e) => updateMapping(activeSource.id, f.key, e.target.value)}
                     >
                       <option value="">— nenhuma —</option>
-                      {headers.map((h) => (
+                      {activeSource.headers.map((h) => (
                         <option key={h} value={h}>
                           {h}
                         </option>
@@ -640,7 +709,16 @@ export default function Page() {
                     </div>
                   </div>
 
-                  {lead.category && <span className="chip">{lead.category}</span>}
+                  {(lead.category || showSourceTag) && (
+                    <div className="card-tags">
+                      {lead.category && <span className="chip">{lead.category}</span>}
+                      {showSourceTag && (
+                        <span className="chip chip-source" title={lead.sourceName}>
+                          📄 {lead.sourceName}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <ul className="card-meta">
                     {lead.phoneDisplay && (
