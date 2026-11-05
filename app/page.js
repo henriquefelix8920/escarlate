@@ -519,7 +519,7 @@ export default function Page() {
           </div>
         </div>
 
-        <div className="topbar-actions">
+        <div className="topbar-actions">\n          <a className="btn-ghost" href="/prospeccao">⌕ Pesquisa automática</a>
           {leads.length > 0 && (
             <>
               <button className="btn-ghost" onClick={() => fileInputRef.current?.click()}>
