@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 
 function config() {
-  const rawBase = process.env.SCRAPER_SERVICE_URL || '';\n  const base = rawBase.endsWith('/') ? rawBase.slice(0, -1) : rawBase;
+  const rawBase = process.env.SCRAPER_SERVICE_URL || '';
+  const base = rawBase.endsWith('/') ? rawBase.slice(0, -1) : rawBase;
   const token = process.env.SCRAPER_API_TOKEN;
   if (!base || !token) throw new Error('Serviço de captura ainda não configurado no Vercel.');
   return { base, token };
