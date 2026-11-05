@@ -3,6 +3,7 @@ import os
 import re
 import secrets
 import uuid
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
@@ -144,6 +145,6 @@ async def run_search(job_id: str, data: SearchRequest):
                 except Exception:
                     continue
             await browser.close()
-        update_job(status="completed", found_count=found, finished_at="now()")
+        update_job(status="completed", found_count=found, finished_at=datetime.now(timezone.utc).isoformat())
     except Exception as exc:
         update_job(status="failed", error=str(exc)[:500], finished_at="now()")
