@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
+import Link from 'next/link';\nimport './prospeccao.css';
 
 const stages = [
   ['new', 'Novo'], ['contacted', 'Contatado'], ['interested', 'Interessado'],
