@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: escarlate-capture
+    runtime: docker
+    plan: free
+    region: virginia
+    rootDir: scraper
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SCRAPER_API_TOKEN
+        sync: false
