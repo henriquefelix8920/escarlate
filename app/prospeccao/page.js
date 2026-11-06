@@ -88,6 +88,22 @@ export default function ProspeccaoPage() {
     finally { setSaving((old) => ({ ...old, [id]: false })); }
   }
 
+  async function deleteLead(lead) {
+    const confirmed = window.confirm(`Tem certeza que deseja excluir "${lead.name}"? Essa ação não pode ser desfeita.`);
+    if (!confirmed) return;
+    setSaving((old) => ({ ...old, [lead.id]: true }));
+    try {
+      const response = await fetch('/api/leads/' + lead.id, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Falha ao excluir lead.');
+      setLeads((old) => old.filter((item) => item.id !== lead.id));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving((old) => ({ ...old, [lead.id]: false }));
+    }
+  }
+
   const noSite = useMemo(() => leads.filter((lead) => !String(lead.website || '').trim()), [leads]);
   const stats = useMemo(() => ({
     noSite: noSite.length,
@@ -153,7 +169,7 @@ export default function ProspeccaoPage() {
               visible.map((lead) => {
                 const wa = whatsapp(lead.phone);
                 return <article className="prospect-lead" key={lead.id}>
-                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}</div><div className="lead-actions">{wa ? <a className="whatsapp-action" href={wa} target="_blank" rel="noreferrer">◉ Abrir WhatsApp</a> : <span className="no-phone">Telefone não encontrado</span>}</div></div>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}</div><div className="lead-actions">{wa ? <a className="whatsapp-action" href={wa} target="_blank" rel="noreferrer">◉ Abrir WhatsApp</a> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
                   <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
                 </article>;
               })
