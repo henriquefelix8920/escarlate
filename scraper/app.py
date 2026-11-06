@@ -57,10 +57,10 @@ async def start_search(data: SearchRequest, background: BackgroundTasks):
 def cancel_job(job_id: str):
     try:
         client = db()
-        result = client.table("search_jobs").select("*").eq("id", job_id).maybe_single().execute()
+        result = client.table("search_jobs").select("*").eq("id", job_id).limit(1).execute()
         if not result.data:
             raise HTTPException(status_code=404, detail="Search not found")
-        current = result.data
+        current = result.data[0]
         if current.get("status") in {"completed", "failed", "cancelled"}:
             return current
         client.table("search_jobs").update({"status": "cancelling"}).eq("id", job_id).execute()
@@ -73,10 +73,10 @@ def cancel_job(job_id: str):
 @app.get("/api/jobs/{job_id}", dependencies=[Depends(require_token)])
 def get_job(job_id: str):
     try:
-        result = db().table("search_jobs").select("*").eq("id", job_id).maybe_single().execute()
+        result = db().table("search_jobs").select("*").eq("id", job_id).limit(1).execute()
         if not result.data:
             raise HTTPException(status_code=404, detail="Search not found")
-        return result.data
+        return result.data[0]
     except HTTPException:
         raise
     except Exception as exc:
@@ -114,8 +114,8 @@ async def _run_search(job_id: str, data: SearchRequest):
         update_job(found_count=progress["saved"], message=json.dumps(progress, ensure_ascii=False))
 
     def check_cancelled():
-        result = client.table("search_jobs").select("status").eq("id", job_id).maybe_single().execute()
-        if result.data and result.data.get("status") in {"cancelling", "cancelled"}:
+        result = client.table("search_jobs").select("status").eq("id", job_id).limit(1).execute()
+        if result.data and result.data[0].get("status") in {"cancelling", "cancelled"}:
             update_job(status="cancelled", finished_at=datetime.now(timezone.utc).isoformat())
             raise SearchCancelled()
 
