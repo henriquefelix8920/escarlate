@@ -1,5 +1,4 @@
 -- Escarlate CRM — schema inicial para Supabase (PostgreSQL)
--- Execute no SQL Editor do seu projeto Supabase.
 create extension if not exists pgcrypto;
 
 create table if not exists public.leads (
@@ -20,9 +19,13 @@ create table if not exists public.leads (
   status text not null default 'new'
     check (status in ('new','contacted','interested','proposal','won','lost')),
   notes text not null default '',
+  deal_value numeric(12,2) not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Atualiza instalações existentes sem apagar dados.
+alter table public.leads add column if not exists deal_value numeric(12,2) not null default 0;
 
 create unique index if not exists leads_phone_normalized_unique
   on public.leads(phone_normalized) where phone_normalized is not null and phone_normalized <> '';
@@ -44,7 +47,5 @@ create table if not exists public.search_jobs (
   finished_at timestamptz
 );
 
--- Segurança: o acesso será feito por rotas server-side do Next.js.
--- Não exponha a chave service_role no navegador.
 alter table public.leads enable row level security;
 alter table public.search_jobs enable row level security;
