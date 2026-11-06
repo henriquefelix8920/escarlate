@@ -28,3 +28,9 @@
 .prospect-cancel:disabled{opacity:.6;cursor:wait}
 @media(max-width:1100px){.prospect-actions{grid-column:1/-1}}
 @media(max-width:720px){.prospect-actions{display:grid;grid-template-columns:1fr 1fr}}
+
+
+.job-progress-stats{display:flex;flex-wrap:wrap;gap:7px;margin-top:5px}
+.job-progress-stats span{display:inline-flex;gap:4px;align-items:center;padding:6px 9px;border:1px solid rgba(255,255,255,.09);border-radius:7px;background:rgba(255,255,255,.035);font-size:.72rem}
+.job-progress-stats b{color:#fff;font-variant-numeric:tabular-nums}
+.job-status>span{line-height:1.5}
