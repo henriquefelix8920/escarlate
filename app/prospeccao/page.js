@@ -26,7 +26,7 @@ const whatsapp = (phone) => {
 export default function ProspeccaoPage() {
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('');
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(20);
   const [leads, setLeads] = useState([]);
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -194,13 +194,14 @@ export default function ProspeccaoPage() {
           <form onSubmit={startSearch} className="prospect-form">
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
             <label>Cidade<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
-            <label className="limit-field">Quantidade<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[5,10,15].map((n) => <option key={n} value={n}>{n} empresas</option>)}</select></label>
+            <label className="limit-field">Meta de leads<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[20,50,100,200].map((n) => <option key={n} value={n}>{n} leads</option>)}</select></label>
             <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
           {job && <div className="job-status">
             <strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : job.status === 'cancelled' ? 'Pesquisa interrompida' : job.status === 'cancelling' ? 'Interrompendo pesquisa…' : 'Pesquisa em andamento'}</strong>
             {jobProgress ? <>
               <span>{jobProgress.detail}</span>
+              {jobProgress.total_batches > 0 && <span>Lote {jobProgress.batch || 0} de {jobProgress.total_batches} · análise em grupos de até 20 empresas</span>}
               <div className="job-progress-stats">
                 <span><b>{jobProgress.scanned || 0}</b> analisadas de <b>{jobProgress.candidates || 0}</b> encontradas</span>
                 <span><b>{jobProgress.saved || 0}</b> leads salvos</span>
