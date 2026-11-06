@@ -147,6 +147,14 @@ export default function ProspeccaoPage() {
     pipeline: leads.filter((lead) => ['interested','proposal'].includes(lead.status)).reduce((sum, lead) => sum + Number(lead.deal_value || 0), 0),
   }), [leads, noSite]);
 
+  const jobProgress = (() => {
+    if (!job?.message) return null;
+    try {
+      const parsed = JSON.parse(job.message);
+      return parsed?.version === 1 ? parsed : null;
+    } catch { return null; }
+  })();
+
   const visible = noSite.filter((lead) => {
     const matchesFilter = filter === 'all' || (filter === 'pending' ? lead.status === 'new' : lead.status === filter);
     const text = [lead.name, lead.phone, lead.city, lead.address, lead.category].filter(Boolean).join(' ').toLowerCase();
@@ -188,7 +196,20 @@ export default function ProspeccaoPage() {
             <label className="limit-field">Quantidade<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[5,10,15].map((n) => <option key={n} value={n}>{n} empresas</option>)}</select></label>
             <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
-          {job && <div className="job-status"><strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : job.status === 'cancelled' ? 'Pesquisa interrompida' : job.status === 'cancelling' ? 'Interrompendo pesquisa…' : 'Pesquisa em andamento'}</strong><span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>{job.found_count !== undefined && <span>{job.found_count} novos leads salvos</span>}</div>}
+          {job && <div className="job-status">
+            <strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : job.status === 'cancelled' ? 'Pesquisa interrompida' : job.status === 'cancelling' ? 'Interrompendo pesquisa…' : 'Pesquisa em andamento'}</strong>
+            {jobProgress ? <>
+              <span>{jobProgress.detail}</span>
+              <div className="job-progress-stats">
+                <span><b>{jobProgress.scanned || 0}</b> analisadas de <b>{jobProgress.candidates || 0}</b> encontradas</span>
+                <span><b>{jobProgress.saved || 0}</b> leads salvos</span>
+                <span><b>{jobProgress.with_website || 0}</b> descartadas por já terem site</span>
+                <span><b>{jobProgress.duplicates || 0}</b> duplicadas</span>
+                <span><b>{jobProgress.errors || 0}</b> com erro</span>
+              </div>
+            </> : <span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>}
+            {job.found_count !== undefined && !jobProgress && <span>{job.found_count} novos leads salvos</span>}
+          </div>}
           <p className="prospect-hint">A captura utiliza informações públicas do Google Maps. Empresas com site identificado são descartadas.</p>
         </section>
 
