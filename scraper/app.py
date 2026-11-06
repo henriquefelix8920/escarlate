@@ -132,17 +132,17 @@ async def run_search(job_id: str, data: SearchRequest):
                     }
                     existing = client.table("leads").select("id").eq("google_maps_url", maps_url).limit(1).execute()
                     if existing.data:
-                        client.table("leads").update(row).eq("id", existing.data[0]["id"]).execute()
-                    elif normalized:
+                        # Não sobrescreve etapa, observações ou valor de um lead já trabalhado.
+                        continue
+                    if normalized:
                         by_phone = client.table("leads").select("id").eq("phone_normalized", normalized).limit(1).execute()
                         if by_phone.data:
-                            client.table("leads").update(row).eq("id", by_phone.data[0]["id"]).execute()
-                        else:
-                            client.table("leads").insert(row).execute()
-                            found += 1
-                    else:
-                        client.table("leads").insert(row).execute()
-                        found += 1
+                            # O telefone já identifica uma empresa cadastrada: preserva o registro existente.
+                            continue
+
+                    # Só conta e publica no progresso depois que o novo lead foi salvo.
+                    client.table("leads").insert(row).execute()
+                    found += 1
                     update_job(found_count=found)
                 except Exception:
                     continue
