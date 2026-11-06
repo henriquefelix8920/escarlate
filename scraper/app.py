@@ -77,7 +77,9 @@ def get_job(job_id: str):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Could not read search: {str(exc)[:180]}")
+        # Preserve the exact database/API failure in Render logs for diagnosis.
+        print(f"Falha ao consultar pesquisa {job_id}: {type(exc).__name__}: {str(exc)[:500]}", flush=True)
+        raise HTTPException(status_code=503, detail=f"Could not read search ({type(exc).__name__}): {str(exc)[:180]}")
 
 class SearchCancelled(Exception):
     pass
