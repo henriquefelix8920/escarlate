@@ -33,7 +33,7 @@ def require_token(authorization: str | None = Header(default=None)):
 class SearchRequest(BaseModel):
     city: str = Field(min_length=2, max_length=100)
     category: str = Field(min_length=2, max_length=100)
-    limit: int = Field(default=10, ge=1, le=15)
+    limit: int = Field(default=20, ge=1, le=200)
 
 def digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
@@ -100,6 +100,7 @@ async def _run_search(job_id: str, data: SearchRequest):
         "version": 1, "phase": "starting", "detail": "Preparando a pesquisa…",
         "scanned": 0, "candidates": 0, "with_website": 0,
         "duplicates": 0, "errors": 0, "saved": 0,
+        "batch": 0, "total_batches": 0,
     }
 
     def update_job(**values):
@@ -162,37 +163,52 @@ async def _run_search(job_id: str, data: SearchRequest):
                 raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
             feed = page.locator('div[role="feed"]')
             links = set()
-            candidate_limit = min(data.limit * 2, 20)
-            for scroll_number in range(5):
+            # Collect up to 200 Maps listings, scrolling in small increments.
+            # The cap protects the free 512 MiB worker while allowing multiple batches.
+            candidate_limit = 200
+            stagnant_scrolls = 0
+            scroll_number = 0
+            while len(links) < candidate_limit and stagnant_scrolls < 4 and scroll_number < 40:
                 check_cancelled()
+                before = len(links)
                 # Read hrefs in one browser-side operation; avoid one Playwright handle per anchor.
                 hrefs = await page.locator('a[href*="/maps/place/"]').evaluate_all(
                     "(elements) => elements.map((element) => element.href).filter(Boolean)"
                 )
-                for href in hrefs:
-                    links.add(href)
-                    if len(links) >= candidate_limit:
-                        break
+                links.update(hrefs)
                 if len(links) >= candidate_limit:
                     break
+                stagnant_scrolls = stagnant_scrolls + 1 if len(links) == before else 0
+                scroll_number += 1
                 await feed.evaluate("el => el.scrollBy(0, Math.max(el.scrollHeight, 700))")
                 await page.wait_for_timeout(1000)
                 report_progress(
                     phase="collecting",
-                    detail=f"Encontrando empresas no Google Maps (varredura {scroll_number + 1}/5)…",
+                    detail=f"Encontrando empresas no Google Maps — {len(links)} de até {candidate_limit}…",
                     candidates=len(links),
                 )
 
             found = 0
+            candidates = list(links)[:candidate_limit]
+            total_batches = (len(candidates) + 19) // 20
             report_progress(
                 phase="analyzing",
-                detail=f"{len(links)} empresas encontradas. Analisando cada uma…",
-                candidates=len(links),
+                detail=f"{len(candidates)} empresas encontradas. Iniciando análise em lotes de até 20…",
+                candidates=len(candidates),
+                total_batches=total_batches,
             )
-            for maps_url in list(links):
-                check_cancelled()
-                if found >= data.limit:
-                    break
+            for batch_index in range(total_batches):
+                batch = candidates[batch_index * 20:(batch_index + 1) * 20]
+                report_progress(
+                    phase="analyzing",
+                    detail=f"Analisando lote {batch_index + 1} de {total_batches} ({len(batch)} empresas)…",
+                    batch=batch_index + 1,
+                    total_batches=total_batches,
+                )
+                for maps_url in batch:
+                    check_cancelled()
+                    if found >= data.limit:
+                        break
                 try:
                     await page.goto(maps_url, wait_until="domcontentloaded", timeout=30000)
                     check_cancelled()
@@ -271,7 +287,7 @@ async def _run_search(job_id: str, data: SearchRequest):
             check_cancelled()
         report_progress(
             phase="completed",
-            detail="Pesquisa concluída. Confira o resumo da coleta abaixo.",
+            detail=f"Pesquisa concluída após {progress.get('batch', 0)} lote(s). Confira o resumo abaixo.",
         )
         update_job(status="completed", found_count=found, message=json.dumps(progress, ensure_ascii=False), finished_at=datetime.now(timezone.utc).isoformat())
     except SearchCancelled:
