@@ -14,6 +14,9 @@ from playwright.async_api import async_playwright
 
 app = FastAPI(title="Escarlate Capture API", version="1.0.0")
 
+# Keep only one Chromium session active on the 512 MiB Render instance.
+SEARCH_LOCK = asyncio.Lock()
+
 def db() -> Client:
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -85,8 +88,14 @@ class SearchCancelled(Exception):
     pass
 
 async def run_search(job_id: str, data: SearchRequest):
+    async with SEARCH_LOCK:
+        await _run_search(job_id, data)
+
+
+async def _run_search(job_id: str, data: SearchRequest):
     client = db()
     browser = None
+    browser_context = None
     progress = {
         "version": 1, "phase": "starting", "detail": "Preparando a pesquisa…",
         "scanned": 0, "candidates": 0, "with_website": 0,
@@ -128,7 +137,11 @@ async def run_search(job_id: str, data: SearchRequest):
                     "--renderer-process-limit=1",
                 ],
             )
-            page = await browser.new_page(locale="pt-BR", viewport={"width": 1280, "height": 720})
+            browser_context = await browser.new_context(
+                locale="pt-BR", viewport={"width": 960, "height": 640},
+                device_scale_factor=1, service_workers="block",
+            )
+            page = await browser_context.new_page()
 
             async def block_heavy_resources(route):
                 if route.request.resource_type in {"image", "media", "font"}:
@@ -149,20 +162,24 @@ async def run_search(job_id: str, data: SearchRequest):
                 raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
             feed = page.locator('div[role="feed"]')
             links = set()
-            for scroll_number in range(8):
+            candidate_limit = min(data.limit * 2, 20)
+            for scroll_number in range(5):
                 check_cancelled()
-                anchors = await page.locator('a[href*="/maps/place/"]').all()
-                for anchor in anchors:
-                    href = await anchor.get_attribute("href")
-                    if href:
-                        links.add(href)
-                if len(links) >= data.limit * 3:
+                # Read hrefs in one browser-side operation; avoid one Playwright handle per anchor.
+                hrefs = await page.locator('a[href*="/maps/place/"]').evaluate_all(
+                    "(elements) => elements.map((element) => element.href).filter(Boolean)"
+                )
+                for href in hrefs:
+                    links.add(href)
+                    if len(links) >= candidate_limit:
+                        break
+                if len(links) >= candidate_limit:
                     break
                 await feed.evaluate("el => el.scrollBy(0, Math.max(el.scrollHeight, 700))")
                 await page.wait_for_timeout(1000)
                 report_progress(
                     phase="collecting",
-                    detail=f"Encontrando empresas no Google Maps (varredura {scroll_number + 1}/8)…",
+                    detail=f"Encontrando empresas no Google Maps (varredura {scroll_number + 1}/5)…",
                     candidates=len(links),
                 )
 
@@ -271,6 +288,11 @@ async def run_search(job_id: str, data: SearchRequest):
         except Exception as update_exc:
             print(f"Falha ao registrar erro do job {job_id}: {update_exc}", flush=True)
     finally:
+        if browser_context:
+            try:
+                await browser_context.close()
+            except Exception:
+                pass
         if browser:
             try:
                 await browser.close()
