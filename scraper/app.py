@@ -49,6 +49,26 @@ async def start_search(data: SearchRequest, background: BackgroundTasks):
     background.add_task(run_search, job_id, data)
     return {"id": job_id, "status": "queued"}
 
+@app.post("/api/jobs/{job_id}/cancel", dependencies=[Depends(require_token)])
+def cancel_job(job_id: str):
+    try:
+        client = db()
+        result = client.table("search_jobs").select("*").eq("id", job_id).maybe_single().execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Search not found")
+        current = result.data
+        if current.get("status") in {"completed", "failed", "cancelled"}:
+            return current
+        client.table("search_jobs").update({
+            "status": "cancelling",
+            "message": "Interrupção solicitada pelo usuário.",
+        }).eq("id", job_id).execute()
+        return {**current, "status": "cancelling", "message": "Interrupção solicitada. A captura será encerrada com segurança."}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Could not cancel search: {str(exc)[:180]}")
+
 @app.get("/api/jobs/{job_id}", dependencies=[Depends(require_token)])
 def get_job(job_id: str):
     try:
@@ -61,12 +81,25 @@ def get_job(job_id: str):
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Could not read search: {str(exc)[:180]}")
 
+class SearchCancelled(Exception):
+    pass
+
 async def run_search(job_id: str, data: SearchRequest):
     client = db()
+    browser = None
+
     def update_job(**values):
         client.table("search_jobs").update(values).eq("id", job_id).execute()
+
+    def check_cancelled():
+        result = client.table("search_jobs").select("status").eq("id", job_id).maybe_single().execute()
+        if result.data and result.data.get("status") in {"cancelling", "cancelled"}:
+            update_job(status="cancelled", message="Pesquisa interrompida pelo usuário.", finished_at=datetime.now(timezone.utc).isoformat())
+            raise SearchCancelled()
+
     try:
-        update_job(status="running")
+        check_cancelled()
+        update_job(status="running", message="Coletando empresas…")
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
@@ -83,8 +116,6 @@ async def run_search(job_id: str, data: SearchRequest):
             )
             page = await browser.new_page(locale="pt-BR", viewport={"width": 1280, "height": 720})
 
-            # O worker gratuito tem memória limitada; imagens, fontes e mídia não são necessárias
-            # para ler os dados textuais dos estabelecimentos no Maps.
             async def block_heavy_resources(route):
                 if route.request.resource_type in {"image", "media", "font"}:
                     await route.abort()
@@ -92,16 +123,19 @@ async def run_search(job_id: str, data: SearchRequest):
                     await route.continue_()
 
             await page.route("**/*", block_heavy_resources)
+            check_cancelled()
             target = "https://www.google.com/maps/search/" + quote(f"{data.category} em {data.city}")
             await page.goto(target, wait_until="domcontentloaded", timeout=60000)
+            check_cancelled()
             try:
                 await page.locator('div[role="feed"]').wait_for(timeout=25000)
             except Exception:
-                await browser.close()
+                check_cancelled()
                 raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
             feed = page.locator('div[role="feed"]')
             links = set()
             for _ in range(8):
+                check_cancelled()
                 anchors = await page.locator('a[href*="/maps/place/"]').all()
                 for anchor in anchors:
                     href = await anchor.get_attribute("href")
@@ -114,11 +148,14 @@ async def run_search(job_id: str, data: SearchRequest):
 
             found = 0
             for maps_url in list(links):
+                check_cancelled()
                 if found >= data.limit:
                     break
                 try:
                     await page.goto(maps_url, wait_until="domcontentloaded", timeout=30000)
+                    check_cancelled()
                     await page.wait_for_timeout(800)
+                    check_cancelled()
                     title = page.locator("h1").first
                     name = (await title.inner_text()).strip() if await title.count() else ""
                     if not name:
@@ -139,7 +176,6 @@ async def run_search(job_id: str, data: SearchRequest):
                             else:
                                 website = await element.get_attribute("href") or ""
 
-                    # A lista comercial deve conter apenas empresas sem site identificado.
                     if website.strip():
                         continue
 
@@ -154,25 +190,36 @@ async def run_search(job_id: str, data: SearchRequest):
                     }
                     existing = client.table("leads").select("id").eq("google_maps_url", maps_url).limit(1).execute()
                     if existing.data:
-                        # Não sobrescreve etapa, observações ou valor de um lead já trabalhado.
                         continue
                     if normalized:
                         by_phone = client.table("leads").select("id").eq("phone_normalized", normalized).limit(1).execute()
                         if by_phone.data:
-                            # O telefone já identifica uma empresa cadastrada: preserva o registro existente.
                             continue
-                        # Compatibilidade com cadastros antigos que foram gravados antes da normalização correta.
                         by_raw_phone = client.table("leads").select("id").eq("phone", phone).limit(1).execute()
                         if by_raw_phone.data:
                             continue
 
-                    # Só conta e publica no progresso depois que o novo lead foi salvo.
+                    check_cancelled()
                     client.table("leads").insert(row).execute()
                     found += 1
                     update_job(found_count=found)
+                except SearchCancelled:
+                    raise
                 except Exception:
                     continue
-            await browser.close()
-        update_job(status="completed", found_count=found, finished_at=datetime.now(timezone.utc).isoformat())
+            check_cancelled()
+        update_job(status="completed", found_count=found, message="Pesquisa concluída.", finished_at=datetime.now(timezone.utc).isoformat())
+    except SearchCancelled:
+        return
     except Exception as exc:
-        update_job(status="failed", error=str(exc)[:500], finished_at="now()")
+        try:
+            check_cancelled()
+        except SearchCancelled:
+            return
+        update_job(status="failed", error=str(exc)[:500], finished_at=datetime.now(timezone.utc).isoformat())
+    finally:
+        if browser:
+            try:
+                await browser.close()
+            except Exception:
+                pass
