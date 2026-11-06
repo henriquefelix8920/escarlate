@@ -10,6 +10,18 @@ function config() {
   return { base, token };
 }
 
+async function readJsonResponse(response) {
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error(`O serviço de captura retornou uma resposta vazia (HTTP ${response.status}). Tente novamente em instantes.`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`O serviço de captura retornou uma resposta inválida (HTTP ${response.status}). Tente novamente em instantes.`);
+  }
+}
+
 export async function POST(request) {
   try {
     const { base, token } = config();
@@ -20,7 +32,7 @@ export async function POST(request) {
       body: JSON.stringify(body),
       cache: 'no-store',
     });
-    const payload = await response.json();
+    const payload = await readJsonResponse(response);
     return NextResponse.json(payload, { status: response.status });
   } catch (error) {
     return NextResponse.json({ error: error.message || 'Não foi possível iniciar a pesquisa.' }, { status: 503 });
