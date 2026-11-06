@@ -198,7 +198,7 @@ export default function ProspeccaoPage() {
             <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
           {job && <div className="job-status">
-            <strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : job.status === 'cancelled' ? 'Pesquisa interrompida' : job.status === 'cancelling' ? 'Interrompendo pesquisa…' : 'Pesquisa em andamento'}</strong>
+            <strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : job.status === 'cancelled' ? 'Pesquisa interrompida' : job.status === 'cancelling' ? 'Interrompendo pesquisa…' : job.status === 'retry_wait' ? 'Preparando retomada automática…' : 'Pesquisa em andamento'}</strong>
             {jobProgress ? <>
               <span>{jobProgress.detail}</span>
               {jobProgress.total_batches > 0 && <span>Lote {jobProgress.batch || 0} de {jobProgress.total_batches} · análise em grupos de até 20 empresas</span>}
