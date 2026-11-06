@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import './prospeccao.css';
 
@@ -10,6 +10,12 @@ const stages = [
 ];
 const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(Number(value || 0));
 const digits = (value) => String(value || '').replace(/\\D/g, '');
+async function readJson(response) {
+  const text = await response.text();
+  if (!text.trim()) throw new Error(`O servidor retornou uma resposta vazia (HTTP ${response.status}). Tente novamente.`);
+  try { return JSON.parse(text); }
+  catch { throw new Error(`O servidor retornou uma resposta inválida (HTTP ${response.status}). Tente novamente.`); }
+}
 const whatsapp = (phone) => {
   let value = digits(phone);
   if (value.length < 10) return null;
@@ -28,11 +34,12 @@ export default function ProspeccaoPage() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [saving, setSaving] = useState({});
+  const lastLoadedFoundCount = useRef(0);
 
   const loadLeads = useCallback(async () => {
     try {
       const response = await fetch('/api/leads', { cache: 'no-store' });
-      const data = await response.json();
+      const data = await readJson(response);
       if (!response.ok) throw new Error(data.error || 'Falha ao carregar CRM.');
       setLeads(data.leads || []);
       setError('');
@@ -64,6 +71,7 @@ export default function ProspeccaoPage() {
     setError('');
     setLoading(true);
     setJob(null);
+    lastLoadedFoundCount.current = 0;
     try {
       const response = await fetch('/api/search', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
