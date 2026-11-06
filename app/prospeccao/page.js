@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import './prospeccao.css';
 
@@ -8,6 +8,14 @@ const stages = [
   ['new', 'Novo'], ['contacted', 'Contatado'], ['interested', 'Interessado'],
   ['proposal', 'Proposta'], ['won', 'Fechado'], ['lost', 'Perdido'],
 ];
+const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(Number(value || 0));
+const digits = (value) => String(value || '').replace(/\\D/g, '');
+const whatsapp = (phone) => {
+  let value = digits(phone);
+  if (value.length < 10) return null;
+  if (!value.startsWith('55')) value = '55' + value;
+  return 'https://wa.me/' + value;
+};
 
 export default function ProspeccaoPage() {
   const [city, setCity] = useState('');
@@ -18,6 +26,8 @@ export default function ProspeccaoPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [saving, setSaving] = useState({});
 
   const loadLeads = useCallback(async () => {
     try {
@@ -44,11 +54,7 @@ export default function ProspeccaoPage() {
           setLoading(false);
           if (data.status === 'completed') loadLeads();
         }
-      } catch (err) {
-        setError(err.message);
-        clearInterval(timer);
-        setLoading(false);
-      }
+      } catch (err) { setError(err.message); clearInterval(timer); setLoading(false); }
     }, 3000);
     return () => clearInterval(timer);
   }, [job?.id, job?.status, loadLeads]);
@@ -70,6 +76,7 @@ export default function ProspeccaoPage() {
   }
 
   async function updateLead(id, values) {
+    setSaving((old) => ({ ...old, [id]: true }));
     try {
       const response = await fetch('/api/leads/' + id, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values),
@@ -78,45 +85,82 @@ export default function ProspeccaoPage() {
       if (!response.ok) throw new Error(data.error || 'Falha ao atualizar lead.');
       setLeads((old) => old.map((lead) => lead.id === id ? data.lead : lead));
     } catch (err) { setError(err.message); }
+    finally { setSaving((old) => ({ ...old, [id]: false })); }
   }
 
-  const visible = leads.filter((lead) =>
-    [lead.name, lead.phone, lead.city, lead.address, lead.category].filter(Boolean).join(' ').toLowerCase().includes(query.toLowerCase())
-  );
+  const noSite = useMemo(() => leads.filter((lead) => !String(lead.website || '').trim()), [leads]);
+  const stats = useMemo(() => ({
+    noSite: noSite.length,
+    contacted: noSite.filter((lead) => ['contacted','interested','proposal','won'].includes(lead.status)).length,
+    proposals: noSite.filter((lead) => lead.status === 'proposal').length,
+    won: leads.filter((lead) => lead.status === 'won').length,
+    revenue: leads.filter((lead) => lead.status === 'won').reduce((sum, lead) => sum + Number(lead.deal_value || 0), 0),
+    pipeline: leads.filter((lead) => ['interested','proposal'].includes(lead.status)).reduce((sum, lead) => sum + Number(lead.deal_value || 0), 0),
+  }), [leads, noSite]);
+
+  const visible = noSite.filter((lead) => {
+    const matchesFilter = filter === 'all' || (filter === 'pending' ? lead.status === 'new' : lead.status === filter);
+    const text = [lead.name, lead.phone, lead.city, lead.address, lead.category].filter(Boolean).join(' ').toLowerCase();
+    return matchesFilter && text.includes(query.toLowerCase());
+  });
 
   return (
-    <main className="prospect-page">
-      <header className="prospect-header">
-        <div><Link href="/" className="back-link">← Voltar ao Escarlate</Link><h1>Prospecção automática</h1><p>Pesquise empresas e acompanhe os contatos no CRM.</p></div>
-        <div className="prospect-logo">EF</div>
-      </header>
+    <main className="crm-shell">
+      <aside className="crm-sidebar">
+        <Link href="/" className="crm-brand"><span className="crm-brand-mark">E</span><span>ESCARLATE<small>CRM COMERCIAL</small></span></Link>
+        <div className="nav-caption">ESPAÇO DE TRABALHO</div>
+        <a className="nav-item active" href="#dashboard">▦ <span>Visão geral</span></a>
+        <a className="nav-item" href="#leads">◉ <span>Leads</span><b>{noSite.length}</b></a>
+        <a className="nav-item" href="#captura">⌕ <span>Prospecção</span></a>
+        <div className="sidebar-bottom"><span className="status-dot" /> CRM conectado</div>
+      </aside>
 
-      <section className="prospect-search panel">
-        <div className="section-kicker">CAPTURA DE LEADS</div>
-        <h2>Encontrar empresas no Google Maps</h2>
-        <form onSubmit={startSearch} className="prospect-form">
-          <label>O que você procura<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
-          <label>Em qual cidade?<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
-          <label className="limit-field">Quantidade<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[5,10,15].map((n) => <option key={n} value={n}>{n} empresas</option>)}</select></label>
-          <button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Iniciar pesquisa'}</button>
-        </form>
-        <p className="prospect-hint">A captura depende dos resultados públicos do Google Maps e pode falhar se houver CAPTCHA, bloqueio temporário ou limites do serviço.</p>
-        {job && <div className="job-status"><strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : 'Pesquisa em andamento'}</strong><span>{job.message || job.error || 'Coletando resultados…'}</span>{job.found_count !== undefined && <span>{job.found_count} novos leads salvos</span>}</div>}
-      </section>
+      <section className="crm-main">
+        <header className="crm-topbar"><div><span className="eyebrow">SEU NEGÓCIO, EM UM SÓ LUGAR</span><h1>Visão geral</h1><p>Acompanhe oportunidades, contatos e resultados.</p></div><button className="refresh-button" onClick={loadLeads}>↻ Atualizar dados</button></header>
 
-      {error && <div className="prospect-error">{error}</div>}
+        {error && <div className="prospect-error">{error}</div>}
 
-      <section className="prospect-crm">
-        <div className="crm-heading"><div><div className="section-kicker">BASE PERMANENTE</div><h2>Seus leads</h2><p>{leads.length} registros salvos no banco de dados</p></div><button className="refresh-button" onClick={loadLeads}>↻ Atualizar</button></div>
-        <div className="crm-tools"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar empresa, telefone ou cidade…" /><a href="/api/leads" target="_blank" rel="noreferrer">Ver API</a></div>
-        <div className="lead-list">
-          {visible.length === 0 ? <div className="empty-crm">{leads.length ? 'Nenhum lead corresponde à busca.' : 'Seus leads capturados aparecerão aqui. Faça uma pesquisa para começar.'}</div> :
-            visible.map((lead) => <article className="prospect-lead" key={lead.id}>
-              <div className="lead-main"><h3>{lead.name}</h3><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ')}</p><div className="lead-links">{lead.phone && <a href={'https://wa.me/' + String(lead.phone).replace(/\\D/g, '')} target="_blank" rel="noreferrer">{lead.phone}</a>}{lead.website && <a href={lead.website} target="_blank" rel="noreferrer">Site ↗</a>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Google Maps ↗</a>}</div></div>
-              <div className="lead-controls"><select value={lead.status} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select><textarea defaultValue={lead.notes || ''} placeholder="Observações…" onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></div>
-            </article>)
-          }
-        </div>
+        <section id="dashboard" className="finance-section">
+          <div className="section-title"><div><span className="eyebrow">RESUMO FINANCEIRO</span><h2>Como estão seus resultados</h2></div><span className="live-label"><i /> Dados do CRM</span></div>
+          <div className="finance-grid">
+            <article className="finance-card revenue-card"><span>Faturamento fechado</span><strong>{money(stats.revenue)}</strong><small>{stats.won} negócio(s) marcado(s) como fechado(s)</small><div className="finance-symbol">↗</div></article>
+            <article className="finance-card"><span>Em negociação</span><strong>{money(stats.pipeline)}</strong><small>Valor informado em interessados e propostas</small><div className="finance-symbol">◎</div></article>
+            <article className="finance-card"><span>Propostas enviadas</span><strong>{stats.proposals}</strong><small>Oportunidades aguardando retorno</small><div className="finance-symbol">▤</div></article>
+            <article className="finance-card"><span>Leads sem site</span><strong>{stats.noSite}</strong><small>{stats.contacted} já trabalhados no funil</small><div className="finance-symbol">◉</div></article>
+          </div>
+          <p className="finance-note">O faturamento considera apenas leads com etapa “Fechado” e valor preenchido. Registre o valor em cada oportunidade para manter o painel atualizado.</p>
+        </section>
+
+        <section id="captura" className="capture-panel">
+          <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Busque empresas locais que ainda não possuem site.</p></div><span className="capture-icon">⌕</span></div>
+          <form onSubmit={startSearch} className="prospect-form">
+            <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
+            <label>Cidade<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
+            <label className="limit-field">Quantidade<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[5,10,15].map((n) => <option key={n} value={n}>{n} empresas</option>)}</select></label>
+            <button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>
+          </form>
+          {job && <div className="job-status"><strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : 'Pesquisa em andamento'}</strong><span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>{job.found_count !== undefined && <span>{job.found_count} novos leads salvos</span>}</div>}
+          <p className="prospect-hint">A captura utiliza informações públicas do Google Maps. Empresas com site identificado são descartadas.</p>
+        </section>
+
+        <section id="leads" className="leads-section">
+          <div className="leads-heading"><div><span className="eyebrow">SEU FUNIL COMERCIAL</span><h2>Leads sem site</h2><p>Empresas que podem precisar de um site profissional.</p></div><span className="lead-total">{visible.length} exibidos</span></div>
+          <div className="lead-toolbar"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="⌕  Buscar por empresa, telefone ou cidade..." /><div className="lead-filters">
+            {[['all','Todos'],['pending','Novos'],['contacted','Contatados'],['interested','Interessados'],['proposal','Propostas'],['won','Fechados'],['lost','Perdidos']].map(([value,label]) => <button key={value} className={filter === value ? 'filter-active' : ''} onClick={() => setFilter(value)}>{label}</button>)}
+          </div></div>
+          <div className="lead-list">
+            {visible.length === 0 ? <div className="empty-crm">{noSite.length ? 'Nenhum lead corresponde a esse filtro.' : 'Ainda não há leads sem site. Faça uma pesquisa acima para encontrar oportunidades.'}</div> :
+              visible.map((lead) => {
+                const wa = whatsapp(lead.phone);
+                return <article className="prospect-lead" key={lead.id}>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}</div><div className="lead-actions">{wa ? <a className="whatsapp-action" href={wa} target="_blank" rel="noreferrer">◉ Abrir WhatsApp</a> : <span className="no-phone">Telefone não encontrado</span>}</div></div>
+                  <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
+                </article>;
+              })
+            }
+          </div>
+        </section>
+        <footer className="crm-footer">ESCARLATE CRM <span>•</span> Feito para transformar oportunidades em clientes.</footer>
       </section>
     </main>
   );
