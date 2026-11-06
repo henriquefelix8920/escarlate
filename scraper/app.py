@@ -32,7 +32,7 @@ class SearchRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=15)
 
 def digits(value: str) -> str:
-    return re.sub(r"\\D", "", value or "")
+    return re.sub(r"\D", "", value or "")
 
 @app.get("/health")
 def health():
