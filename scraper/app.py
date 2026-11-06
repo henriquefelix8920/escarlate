@@ -33,7 +33,7 @@ def require_token(authorization: str | None = Header(default=None)):
 class SearchRequest(BaseModel):
     city: str = Field(min_length=2, max_length=100)
     category: str = Field(min_length=2, max_length=100)
-    limit: int = Field(default=20, ge=1, le=200)
+    limit: int = Field(default=20, ge=1, le=100)
 
 def digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
@@ -163,9 +163,9 @@ async def _run_search(job_id: str, data: SearchRequest):
                 raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
             feed = page.locator('div[role="feed"]')
             links = set()
-            # Collect up to 200 Maps listings, scrolling in small increments.
+            # Collect up to 100 Maps listings, scrolling in small increments.
             # The cap protects the free 512 MiB worker while allowing multiple batches.
-            candidate_limit = 200
+            candidate_limit = 100
             stagnant_scrolls = 0
             scroll_number = 0
             while len(links) < candidate_limit and stagnant_scrolls < 4 and scroll_number < 40:
