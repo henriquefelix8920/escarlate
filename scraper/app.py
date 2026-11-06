@@ -32,7 +32,7 @@ class SearchRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=15)
 
 def digits(value: str) -> str:
-    return re.sub(r"\D", "", value or "")
+    return re.sub(r"\\D", "", value or "")
 
 @app.get("/health")
 def health():
@@ -41,10 +41,7 @@ def health():
 @app.post("/api/search", dependencies=[Depends(require_token)])
 async def start_search(data: SearchRequest, background: BackgroundTasks):
     job_id = str(uuid.uuid4())
-    row = {
-        "id": job_id, "term": data.category, "city": data.city,
-        "status": "queued", "requested_limit": data.limit, "found_count": 0,
-    }
+    row = {"id": job_id, "term": data.category, "city": data.city, "status": "queued", "requested_limit": data.limit, "found_count": 0}
     try:
         db().table("search_jobs").insert(row).execute()
     except Exception as exc:
@@ -80,7 +77,6 @@ async def run_search(job_id: str, data: SearchRequest):
             except Exception:
                 await browser.close()
                 raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
-
             feed = page.locator('div[role="feed"]')
             links = set()
             for _ in range(8):
@@ -89,13 +85,15 @@ async def run_search(job_id: str, data: SearchRequest):
                     href = await anchor.get_attribute("href")
                     if href:
                         links.add(href)
-                if len(links) >= data.limit:
+                if len(links) >= data.limit * 3:
                     break
                 await feed.evaluate("el => el.scrollBy(0, Math.max(el.scrollHeight, 700))")
                 await page.wait_for_timeout(1000)
 
             found = 0
-            for index, maps_url in enumerate(list(links)[:data.limit]):
+            for maps_url in list(links):
+                if found >= data.limit:
+                    break
                 try:
                     await page.goto(maps_url, wait_until="domcontentloaded", timeout=30000)
                     await page.wait_for_timeout(800)
@@ -119,11 +117,15 @@ async def run_search(job_id: str, data: SearchRequest):
                             else:
                                 website = await element.get_attribute("href") or ""
 
+                    # A lista comercial deve conter apenas empresas sem site identificado.
+                    if website.strip():
+                        continue
+
                     normalized = digits(phone)
                     row = {
                         "name": name[:200], "category": data.category,
                         "phone": phone or None, "phone_normalized": normalized or None,
-                        "website": website or None, "address": address or None,
+                        "website": None, "address": address or None,
                         "city": data.city, "google_maps_url": maps_url,
                         "source": "google_maps", "search_term": f"{data.category} em {data.city}",
                         "status": "new",
