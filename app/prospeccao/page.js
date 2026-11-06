@@ -194,7 +194,7 @@ export default function ProspeccaoPage() {
           <form onSubmit={startSearch} className="prospect-form">
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
             <label>Cidade<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
-            <label className="limit-field">Meta de leads<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[20,50,100,200].map((n) => <option key={n} value={n}>{n} leads</option>)}</select></label>
+            <label className="limit-field">Meta de leads<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[20,40,60,100].map((n) => <option key={n} value={n}>{n} leads</option>)}</select></label>
             <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
           {job && <div className="job-status">
