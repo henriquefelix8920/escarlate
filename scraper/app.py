@@ -68,8 +68,30 @@ async def run_search(job_id: str, data: SearchRequest):
     try:
         update_job(status="running")
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-            page = await browser.new_page(locale="pt-BR")
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-default-apps",
+                    "--no-zygote",
+                    "--renderer-process-limit=1",
+                ],
+            )
+            page = await browser.new_page(locale="pt-BR", viewport={"width": 1280, "height": 720})
+
+            # O worker gratuito tem memória limitada; imagens, fontes e mídia não são necessárias
+            # para ler os dados textuais dos estabelecimentos no Maps.
+            async def block_heavy_resources(route):
+                if route.request.resource_type in {"image", "media", "font"}:
+                    await route.abort()
+                else:
+                    await route.continue_()
+
+            await page.route("**/*", block_heavy_resources)
             target = "https://www.google.com/maps/search/" + quote(f"{data.category} em {data.city}")
             await page.goto(target, wait_until="domcontentloaded", timeout=60000)
             try:
@@ -138,6 +160,10 @@ async def run_search(job_id: str, data: SearchRequest):
                         by_phone = client.table("leads").select("id").eq("phone_normalized", normalized).limit(1).execute()
                         if by_phone.data:
                             # O telefone já identifica uma empresa cadastrada: preserva o registro existente.
+                            continue
+                        # Compatibilidade com cadastros antigos que foram gravados antes da normalização correta.
+                        by_raw_phone = client.table("leads").select("id").eq("phone", phone).limit(1).execute()
+                        if by_raw_phone.data:
                             continue
 
                     # Só conta e publica no progresso depois que o novo lead foi salvo.
