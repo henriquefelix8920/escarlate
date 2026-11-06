@@ -209,82 +209,82 @@ async def _run_search(job_id: str, data: SearchRequest):
                     check_cancelled()
                     if found >= data.limit:
                         break
-                try:
-                    await page.goto(maps_url, wait_until="domcontentloaded", timeout=30000)
-                    check_cancelled()
-                    await page.wait_for_timeout(800)
-                    check_cancelled()
-                    title = page.locator("h1").first
-                    name = (await title.inner_text()).strip() if await title.count() else ""
-                    if not name:
-                        progress["scanned"] += 1
-                        report_progress(detail="Analisando empresas encontradas…")
-                        continue
-                    address = phone = website = ""
-                    for selector, field in [
-                        ('button[data-item-id="address"]', "address"),
-                        ('button[data-item-id^="phone:"]', "phone"),
-                        ('a[data-item-id="authority"]', "website"),
-                    ]:
-                        element = page.locator(selector).first
-                        if await element.count():
-                            value = (await element.get_attribute("aria-label")) or (await element.inner_text())
-                            if field == "address":
-                                address = value.replace("Endereço:", "").strip()
-                            elif field == "phone":
-                                phone = value.replace("Telefone:", "").strip()
-                            else:
-                                website = await element.get_attribute("href") or ""
-
-                    if website.strip():
-                        progress["with_website"] += 1
-                        progress["scanned"] += 1
-                        report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site.")
-                        continue
-
-                    normalized = digits(phone)
-                    row = {
-                        "name": name[:200], "category": data.category,
-                        "phone": phone or None, "phone_normalized": normalized or None,
-                        "website": None, "address": address or None,
-                        "city": data.city, "google_maps_url": maps_url,
-                        "source": "google_maps", "search_term": f"{data.category} em {data.city}",
-                        "status": "new",
-                    }
-                    existing = client.table("leads").select("id").eq("google_maps_url", maps_url).limit(1).execute()
-                    if existing.data:
-                        progress["duplicates"] += 1
-                        progress["scanned"] += 1
-                        report_progress(detail=f"Analisando: {name[:70]} — empresa já cadastrada.")
-                        continue
-                    if normalized:
-                        by_phone = client.table("leads").select("id").eq("phone_normalized", normalized).limit(1).execute()
-                        if by_phone.data:
+                    try:
+                        await page.goto(maps_url, wait_until="domcontentloaded", timeout=30000)
+                        check_cancelled()
+                        await page.wait_for_timeout(800)
+                        check_cancelled()
+                        title = page.locator("h1").first
+                        name = (await title.inner_text()).strip() if await title.count() else ""
+                        if not name:
+                            progress["scanned"] += 1
+                            report_progress(detail="Analisando empresas encontradas…")
+                            continue
+                        address = phone = website = ""
+                        for selector, field in [
+                            ('button[data-item-id="address"]', "address"),
+                            ('button[data-item-id^="phone:"]', "phone"),
+                            ('a[data-item-id="authority"]', "website"),
+                        ]:
+                            element = page.locator(selector).first
+                            if await element.count():
+                                value = (await element.get_attribute("aria-label")) or (await element.inner_text())
+                                if field == "address":
+                                    address = value.replace("Endereço:", "").strip()
+                                elif field == "phone":
+                                    phone = value.replace("Telefone:", "").strip()
+                                else:
+                                    website = await element.get_attribute("href") or ""
+    
+                        if website.strip():
+                            progress["with_website"] += 1
+                            progress["scanned"] += 1
+                            report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site.")
+                            continue
+    
+                        normalized = digits(phone)
+                        row = {
+                            "name": name[:200], "category": data.category,
+                            "phone": phone or None, "phone_normalized": normalized or None,
+                            "website": None, "address": address or None,
+                            "city": data.city, "google_maps_url": maps_url,
+                            "source": "google_maps", "search_term": f"{data.category} em {data.city}",
+                            "status": "new",
+                        }
+                        existing = client.table("leads").select("id").eq("google_maps_url", maps_url).limit(1).execute()
+                        if existing.data:
                             progress["duplicates"] += 1
                             progress["scanned"] += 1
-                            report_progress(detail=f"Analisando: {name[:70]} — telefone já cadastrado.")
+                            report_progress(detail=f"Analisando: {name[:70]} — empresa já cadastrada.")
                             continue
-                        by_raw_phone = client.table("leads").select("id").eq("phone", phone).limit(1).execute()
-                        if by_raw_phone.data:
-                            progress["duplicates"] += 1
-                            progress["scanned"] += 1
-                            report_progress(detail=f"Analisando: {name[:70]} — telefone já cadastrado.")
-                            continue
-
-                    check_cancelled()
-                    client.table("leads").insert(row).execute()
-                    found += 1
-                    progress["saved"] = found
-                    progress["scanned"] += 1
-                    report_progress(detail=f"Lead salvo: {name[:70]}.")
-                except SearchCancelled:
-                    raise
-                except Exception as exc:
-                    progress["errors"] += 1
-                    progress["scanned"] += 1
-                    print(f"Erro ao analisar empresa no job {job_id}: {type(exc).__name__}: {str(exc)[:300]}", flush=True)
-                    report_progress(detail="Uma empresa apresentou erro; a pesquisa continuou com as próximas.")
-            check_cancelled()
+                        if normalized:
+                            by_phone = client.table("leads").select("id").eq("phone_normalized", normalized).limit(1).execute()
+                            if by_phone.data:
+                                progress["duplicates"] += 1
+                                progress["scanned"] += 1
+                                report_progress(detail=f"Analisando: {name[:70]} — telefone já cadastrado.")
+                                continue
+                            by_raw_phone = client.table("leads").select("id").eq("phone", phone).limit(1).execute()
+                            if by_raw_phone.data:
+                                progress["duplicates"] += 1
+                                progress["scanned"] += 1
+                                report_progress(detail=f"Analisando: {name[:70]} — telefone já cadastrado.")
+                                continue
+    
+                        check_cancelled()
+                        client.table("leads").insert(row).execute()
+                        found += 1
+                        progress["saved"] = found
+                        progress["scanned"] += 1
+                        report_progress(detail=f"Lead salvo: {name[:70]}.")
+                    except SearchCancelled:
+                        raise
+                    except Exception as exc:
+                        progress["errors"] += 1
+                        progress["scanned"] += 1
+                        print(f"Erro ao analisar empresa no job {job_id}: {type(exc).__name__}: {str(exc)[:300]}", flush=True)
+                        report_progress(detail="Uma empresa apresentou erro; a pesquisa continuou com as próximas.")
+                check_cancelled()
         report_progress(
             phase="completed",
             detail=f"Pesquisa concluída após {progress.get('batch', 0)} lote(s). Confira o resumo abaixo.",
