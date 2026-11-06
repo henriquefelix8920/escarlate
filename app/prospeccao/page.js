@@ -9,7 +9,7 @@ const stages = [
   ['proposal', 'Proposta'], ['won', 'Fechado'], ['lost', 'Perdido'],
 ];
 const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(Number(value || 0));
-const digits = (value) => String(value || '').replace(/\\D/g, '');
+const digits = (value) => String(value || '').replace(/\D/g, '');
 async function readJson(response) {
   const text = await response.text();
   if (!text.trim()) throw new Error(`O servidor retornou uma resposta vazia (HTTP ${response.status}). Tente novamente.`);
@@ -53,15 +53,23 @@ export default function ProspeccaoPage() {
     const timer = setInterval(async () => {
       try {
         const response = await fetch('/api/jobs/' + encodeURIComponent(job.id), { cache: 'no-store' });
-        const data = await response.json();
+        const data = await readJson(response);
         if (!response.ok) throw new Error(data.error || 'Falha ao consultar pesquisa.');
         setJob(data);
+        const currentFoundCount = Number(data.found_count || 0);
+        if (currentFoundCount > lastLoadedFoundCount.current) {
+          lastLoadedFoundCount.current = currentFoundCount;
+          await loadLeads();
+        }
         if (['completed', 'failed'].includes(data.status)) {
           clearInterval(timer);
           setLoading(false);
-          if (data.status === 'completed') loadLeads();
+          await loadLeads();
         }
-      } catch (err) { setError(err.message); clearInterval(timer); setLoading(false); }
+      } catch (err) {
+        // Uma falha temporária de consulta não interrompe o acompanhamento da pesquisa.
+        setError(err.message);
+      }
     }, 3000);
     return () => clearInterval(timer);
   }, [job?.id, job?.status, loadLeads]);
@@ -77,7 +85,7 @@ export default function ProspeccaoPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ city, category, limit: Number(limit) }),
       });
-      const data = await response.json();
+      const data = await readJson(response);
       if (!response.ok) throw new Error(data.detail || data.error || 'Não foi possível iniciar a captura.');
       setJob({ ...data, status: data.status || 'queued' });
     } catch (err) { setError(err.message); setLoading(false); }
@@ -89,7 +97,7 @@ export default function ProspeccaoPage() {
       const response = await fetch('/api/leads/' + id, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values),
       });
-      const data = await response.json();
+      const data = await readJson(response);
       if (!response.ok) throw new Error(data.error || 'Falha ao atualizar lead.');
       setLeads((old) => old.map((lead) => lead.id === id ? data.lead : lead));
     } catch (err) { setError(err.message); }
@@ -102,7 +110,7 @@ export default function ProspeccaoPage() {
     setSaving((old) => ({ ...old, [lead.id]: true }));
     try {
       const response = await fetch('/api/leads/' + lead.id, { method: 'DELETE' });
-      const data = await response.json();
+      const data = await readJson(response);
       if (!response.ok) throw new Error(data.error || 'Falha ao excluir lead.');
       setLeads((old) => old.filter((item) => item.id !== lead.id));
     } catch (err) {
