@@ -364,6 +364,40 @@ export default function Page() {
         }
 
         setSources(nextSources);
+
+        // Keep the original CSV workflow, but also persist imported leads in the shared CRM.
+        const rowsToSave = nextSources.flatMap((source) =>
+          source.rows.map((row, index) => {
+            const lead = processRow(row, index, source.mapping, source.id, source.fileName);
+            return {
+              name: lead.name, phone: lead.phone || null, phone_normalized: lead.phoneKey || null,
+              email: lead.email || null, category: lead.category || null, address: lead.address || null,
+              website: lead.website || null, instagram: lead.instagram || null, profile: lead.profile || null,
+              source: 'csv',
+            };
+          })
+        );
+        if (rowsToSave.length) {
+          try {
+            let saved = 0;
+            let duplicates = 0;
+            for (let offset = 0; offset < rowsToSave.length; offset += 500) {
+              const response = await fetch('/api/leads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(rowsToSave.slice(offset, offset + 500)),
+              });
+              const result = await response.json();
+              if (!response.ok) throw new Error(result.error || 'Falha ao salvar os leads no banco.');
+              saved += result.inserted || 0;
+              duplicates += result.duplicates || 0;
+            }
+            setImportNotice((current) => [current, `${saved} lead(s) salvos no CRM permanente${duplicates ? `; ${duplicates} duplicado(s) ignorado(s)` : ''}.`].filter(Boolean).join(' · '));
+          } catch (saveError) {
+            setError('Os CSVs foram carregados nesta sessão, mas não foi possível salvá-los no CRM permanente: ' + (saveError?.message || saveError));
+          }
+        }
+
         setActiveSourceId(nextSources[0].id);
         setSeenPhones(nextSeen);
         setStatus({});
@@ -519,7 +553,7 @@ export default function Page() {
           </div>
         </div>
 
-        <div className="topbar-actions">
+        <div className="topbar-actions">\n          <a className="btn-ghost" href="/prospeccao">⌕ Pesquisa automática</a>
           {leads.length > 0 && (
             <>
               <button className="btn-ghost" onClick={() => fileInputRef.current?.click()}>

@@ -1,0 +1,31 @@
+.prospect-page{max-width:1200px;margin:0 auto;padding:34px 22px 80px;color:var(--text)}
+.prospect-header,.crm-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:24px}
+.prospect-header h1{font-size:clamp(1.8rem,4vw,2.5rem);margin:12px 0 6px;letter-spacing:-.04em}
+.prospect-header p,.crm-heading p{color:var(--muted);margin:0}
+.back-link{color:#ff6573;font-size:.9rem;text-decoration:none}
+.prospect-logo{width:54px;height:54px;border-radius:16px;background:linear-gradient(145deg,#ff3b4f,#8e0f1c);display:grid;place-items:center;font-weight:900}
+.panel,.prospect-crm{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:24px;margin-bottom:24px}
+.section-kicker{font-size:.7rem;letter-spacing:.16em;font-weight:800;color:#ff6573}
+.prospect-search h2,.crm-heading h2{font-size:1.3rem;margin:8px 0 18px}
+.prospect-form{display:grid;grid-template-columns:1.3fr 1fr .65fr auto;gap:12px;align-items:end}
+.prospect-form label{display:grid;gap:8px;color:#c6c6ce;font-size:.82rem}
+.prospect-form input,.prospect-form select,.crm-tools input,.lead-controls select,.lead-controls textarea{width:100%;border:1px solid var(--border);background:#0e0e13;border-radius:10px;padding:12px;color:var(--text);outline:none}
+.prospect-form input:focus,.crm-tools input:focus,.lead-controls textarea:focus{border-color:var(--scarlet)}
+.prospect-submit,.refresh-button{border:0;border-radius:10px;padding:13px 17px;background:var(--scarlet);color:white;font-weight:750;cursor:pointer;white-space:nowrap}
+.prospect-submit:disabled{opacity:.55;cursor:wait}
+.prospect-hint{font-size:.78rem;color:var(--muted);margin:14px 0 0}
+.job-status{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:18px;padding:13px 15px;border-radius:10px;background:var(--scarlet-soft);font-size:.85rem}
+.job-status span{color:#c7c7ce}
+.prospect-error{background:#40151b;border:1px solid #8f2934;color:#ffd8dc;padding:13px 16px;border-radius:10px;margin-bottom:20px}
+.crm-heading{margin-bottom:18px}.crm-heading h2{margin-bottom:4px}
+.refresh-button{background:#24242d;border:1px solid var(--border)}
+.crm-tools{display:flex;align-items:center;gap:15px;margin-bottom:15px}
+.crm-tools input{max-width:460px}.crm-tools a{color:#ff6573;font-size:.85rem}
+.lead-list{display:grid;gap:10px}
+.prospect-lead{display:grid;grid-template-columns:1fr minmax(220px,300px);gap:18px;padding:17px;border:1px solid var(--border);border-radius:13px;background:#101015}
+.lead-main h3{margin:0 0 5px;font-size:1rem}.lead-main p{margin:0 0 12px;color:var(--muted);font-size:.82rem}
+.lead-links{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem}.lead-links a{color:#ff7581}
+.lead-controls{display:grid;gap:8px}.lead-controls select{padding:9px}.lead-controls textarea{min-height:62px;resize:vertical;font-size:.8rem}
+.empty-crm{padding:40px 15px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:12px}
+@media(max-width:850px){.prospect-form{grid-template-columns:1fr 1fr}.prospect-submit{min-height:44px}}
+@media(max-width:600px){.prospect-page{padding:22px 14px 60px}.prospect-form{grid-template-columns:1fr}.prospect-lead{grid-template-columns:1fr}.crm-tools{align-items:stretch;flex-direction:column}.crm-tools input{max-width:none}}
