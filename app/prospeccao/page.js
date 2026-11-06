@@ -54,7 +54,8 @@ export default function ProspeccaoPage() {
       try {
         const response = await fetch('/api/jobs/' + encodeURIComponent(job.id), { cache: 'no-store' });
         const data = await readJson(response);
-        if (!response.ok) throw new Error(data.error || 'Falha ao consultar pesquisa.');
+        if (!response.ok) throw new Error(data.detail || data.error || 'Falha ao consultar pesquisa.');
+        setError('');
         setJob(data);
         const currentFoundCount = Number(data.found_count || 0);
         if (currentFoundCount > lastLoadedFoundCount.current) {
@@ -99,7 +100,7 @@ export default function ProspeccaoPage() {
     try {
       const response = await fetch('/api/jobs/' + encodeURIComponent(job.id) + '/cancel', { method: 'POST' });
       const data = await readJson(response);
-      if (!response.ok) throw new Error(data.error || 'Não foi possível parar a pesquisa.');
+      if (!response.ok) throw new Error(data.detail || data.error || 'Não foi possível parar a pesquisa.');
       setJob(data);
       if (data.status === 'cancelled') {
         setLoading(false);
