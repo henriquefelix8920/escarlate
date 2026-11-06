@@ -22,3 +22,18 @@ export async function PATCH(request, { params }) {
     return NextResponse.json({ error: error.message || 'Falha ao atualizar lead.' }, { status: 503 });
   }
 }
+
+export async function DELETE(_request, { params }) {
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from('leads')
+      .delete()
+      .eq('id', params.id)
+      .select('id')
+      .single();
+    if (error) throw error;
+    return NextResponse.json({ deleted: true, id: data.id });
+  } catch (error) {
+    return NextResponse.json({ error: error.message || 'Falha ao excluir lead.' }, { status: 503 });
+  }
+}
