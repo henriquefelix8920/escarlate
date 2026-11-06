@@ -16,6 +16,7 @@ app = FastAPI(title="Escarlate Capture API", version="1.0.0")
 
 # Keep only one Chromium session active on the 512 MiB Render instance.
 SEARCH_LOCK = asyncio.Lock()
+ACTIVE_JOBS = set()
 
 def db() -> Client:
     url = os.environ.get("SUPABASE_URL")
@@ -41,6 +42,19 @@ def digits(value: str) -> str:
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.on_event("startup")
+async def recover_interrupted_jobs():
+    # Retoma pesquisas que ficaram pendentes quando o processo do Render reiniciou.
+    try:
+        client = db()
+        result = client.table("search_jobs").select("*").in_("status", ["queued", "running", "retry_wait"]).execute()
+        for row in result.data or []:
+            data = SearchRequest(city=row["city"], category=row["term"], limit=row["requested_limit"])
+            asyncio.create_task(run_search(row["id"], data))
+    except Exception as exc:
+        print(f"Falha ao recuperar pesquisas pendentes: {type(exc).__name__}: {str(exc)[:300]}", flush=True)
 
 @app.post("/api/search", dependencies=[Depends(require_token)])
 async def start_search(data: SearchRequest, background: BackgroundTasks):
@@ -88,20 +102,42 @@ class SearchCancelled(Exception):
     pass
 
 async def run_search(job_id: str, data: SearchRequest):
-    async with SEARCH_LOCK:
-        await _run_search(job_id, data)
+    if job_id in ACTIVE_JOBS:
+        return
+    ACTIVE_JOBS.add(job_id)
+    try:
+        async with SEARCH_LOCK:
+            await _run_search(job_id, data)
+    finally:
+        ACTIVE_JOBS.discard(job_id)
+
+
+async def retry_search_later(job_id: str, data: SearchRequest, delay: int):
+    await asyncio.sleep(delay)
+    await run_search(job_id, data)
 
 
 async def _run_search(job_id: str, data: SearchRequest):
     client = db()
     browser = None
     browser_context = None
+    job_result = client.table("search_jobs").select("*").eq("id", job_id).limit(1).execute()
+    job_row = job_result.data[0] if job_result.data else {}
+    try:
+        progress = json.loads(job_row.get("message") or "{}")
+        if not isinstance(progress, dict) or progress.get("version") != 1:
+            progress = {}
+    except Exception:
+        progress = {}
     progress = {
         "version": 1, "phase": "starting", "detail": "Preparando a pesquisa…",
         "scanned": 0, "candidates": 0, "with_website": 0,
-        "duplicates": 0, "errors": 0, "saved": 0,
-        "batch": 0, "total_batches": 0,
+        "duplicates": 0, "errors": 0, "saved": int(job_row.get("found_count") or 0),
+        "batch": 0, "total_batches": 0, **progress,
     }
+    found = int(job_row.get("found_count") or 0)
+    candidates = job_row.get("candidates") or []
+    next_candidate_index = int(job_row.get("next_candidate_index") or 0)
 
     def update_job(**values):
         client.table("search_jobs").update(values).eq("id", job_id).execute()
@@ -122,8 +158,9 @@ async def _run_search(job_id: str, data: SearchRequest):
 
     try:
         check_cancelled()
-        update_job(status="running")
-        report_progress(phase="opening_maps", detail="Abrindo o Google Maps…")
+        update_job(status="running", last_heartbeat_at=datetime.now(timezone.utc).isoformat())
+        report_progress(phase="opening_maps" if not candidates else "resuming",
+                        detail="Abrindo o Google Maps…" if not candidates else f"Retomando do registro {next_candidate_index + 1}…")
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
@@ -151,45 +188,52 @@ async def _run_search(job_id: str, data: SearchRequest):
                     await route.continue_()
 
             await page.route("**/*", block_heavy_resources)
-            check_cancelled()
-            target = "https://www.google.com/maps/search/" + quote(f"{data.category} em {data.city}")
-            await page.goto(target, wait_until="domcontentloaded", timeout=60000)
-            check_cancelled()
-            report_progress(phase="collecting", detail="Localizando empresas no Google Maps…")
-            try:
-                await page.locator('div[role="feed"]').wait_for(timeout=25000)
-            except Exception:
+            if not candidates:
                 check_cancelled()
-                raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
-            feed = page.locator('div[role="feed"]')
-            links = set()
-            # Collect up to 100 Maps listings, scrolling in small increments.
-            # The cap protects the free 512 MiB worker while allowing multiple batches.
-            candidate_limit = 100
-            stagnant_scrolls = 0
-            scroll_number = 0
-            while len(links) < candidate_limit and stagnant_scrolls < 4 and scroll_number < 40:
+                target = "https://www.google.com/maps/search/" + quote(f"{data.category} em {data.city}")
+                await page.goto(target, wait_until="domcontentloaded", timeout=60000)
                 check_cancelled()
-                before = len(links)
-                # Read hrefs in one browser-side operation; avoid one Playwright handle per anchor.
-                hrefs = await page.locator('a[href*="/maps/place/"]').evaluate_all(
-                    "(elements) => elements.map((element) => element.href).filter(Boolean)"
-                )
-                links.update(hrefs)
-                if len(links) >= candidate_limit:
-                    break
-                stagnant_scrolls = stagnant_scrolls + 1 if len(links) == before else 0
-                scroll_number += 1
-                await feed.evaluate("el => el.scrollBy(0, Math.max(el.scrollHeight, 700))")
-                await page.wait_for_timeout(1000)
-                report_progress(
-                    phase="collecting",
-                    detail=f"Encontrando empresas no Google Maps — {len(links)} de até {candidate_limit}…",
-                    candidates=len(links),
-                )
-
-            found = 0
-            candidates = list(links)[:candidate_limit]
+                report_progress(phase="collecting", detail="Localizando empresas no Google Maps…")
+                try:
+                    await page.locator('div[role="feed"]').wait_for(timeout=25000)
+                except Exception:
+                    check_cancelled()
+                    raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
+                feed = page.locator('div[role="feed"]')
+                links = set()
+                # Collect up to 100 Maps listings, scrolling in small increments.
+                # The cap protects the free 512 MiB worker while allowing multiple batches.
+                candidate_limit = 100
+                stagnant_scrolls = 0
+                scroll_number = 0
+                while len(links) < candidate_limit and stagnant_scrolls < 4 and scroll_number < 40:
+                    check_cancelled()
+                    before = len(links)
+                    # Read hrefs in one browser-side operation; avoid one Playwright handle per anchor.
+                    hrefs = await page.locator('a[href*="/maps/place/"]').evaluate_all(
+                        "(elements) => elements.map((element) => element.href).filter(Boolean)"
+                    )
+                    links.update(hrefs)
+                    if len(links) >= candidate_limit:
+                        break
+                    stagnant_scrolls = stagnant_scrolls + 1 if len(links) == before else 0
+                    scroll_number += 1
+                    await feed.evaluate("el => el.scrollBy(0, Math.max(el.scrollHeight, 700))")
+                    await page.wait_for_timeout(1000)
+                    report_progress(
+                        phase="collecting",
+                        detail=f"Encontrando empresas no Google Maps — {len(links)} de até {candidate_limit}…",
+                        candidates=len(links),
+                    )
+    
+    
+                candidates = list(links)[:candidate_limit]
+                update_job(candidates=candidates, next_candidate_index=0,
+                           last_heartbeat_at=datetime.now(timezone.utc).isoformat())
+            else:
+                report_progress(phase="resuming",
+                                detail=f"Retomando análise de {len(candidates)} empresas salvas…",
+                                candidates=len(candidates))
             total_batches = (len(candidates) + 19) // 20
             report_progress(
                 phase="analyzing",
@@ -197,15 +241,17 @@ async def _run_search(job_id: str, data: SearchRequest):
                 candidates=len(candidates),
                 total_batches=total_batches,
             )
-            for batch_index in range(total_batches):
-                batch = candidates[batch_index * 20:(batch_index + 1) * 20]
+            for batch_index in range(next_candidate_index // 20, total_batches):
+                batch_start = max(batch_index * 20, next_candidate_index)
+                batch = candidates[batch_start:(batch_index + 1) * 20]
                 report_progress(
                     phase="analyzing",
                     detail=f"Analisando lote {batch_index + 1} de {total_batches} ({len(batch)} empresas)…",
                     batch=batch_index + 1,
                     total_batches=total_batches,
                 )
-                for maps_url in batch:
+                for local_index, maps_url in enumerate(batch):
+                    candidate_index = batch_start + local_index
                     check_cancelled()
                     if found >= data.limit:
                         break
@@ -284,6 +330,11 @@ async def _run_search(job_id: str, data: SearchRequest):
                         progress["scanned"] += 1
                         print(f"Erro ao analisar empresa no job {job_id}: {type(exc).__name__}: {str(exc)[:300]}", flush=True)
                         report_progress(detail="Uma empresa apresentou erro; a pesquisa continuou com as próximas.")
+                    finally:
+                        # Checkpoint após cada empresa; se o processo cair no meio,
+                        # a próxima execução repete apenas esta empresa.
+                        update_job(next_candidate_index=candidate_index + 1,
+                                   last_heartbeat_at=datetime.now(timezone.utc).isoformat())
                 check_cancelled()
         report_progress(
             phase="completed",
@@ -297,10 +348,20 @@ async def _run_search(job_id: str, data: SearchRequest):
             check_cancelled()
         except SearchCancelled:
             return
-        progress["phase"] = "failed"
-        progress["detail"] = "A pesquisa foi interrompida por um erro. Consulte a mensagem de erro."
+        attempt_count = int(job_row.get("attempt_count") or 0) + 1
+        retryable = attempt_count <= 3
+        progress["phase"] = "retry_wait" if retryable else "failed"
+        progress["detail"] = ("Falha temporária. A pesquisa será retomada automaticamente." if retryable
+                              else "A pesquisa atingiu o limite de tentativas. Consulte o erro.")
         try:
-            update_job(status="failed", found_count=progress["saved"], message=json.dumps(progress, ensure_ascii=False), error=str(exc)[:500], finished_at=datetime.now(timezone.utc).isoformat())
+            update_job(status="retry_wait" if retryable else "failed",
+                       attempt_count=attempt_count, found_count=progress["saved"],
+                       message=json.dumps(progress, ensure_ascii=False),
+                       error=str(exc)[:500],
+                       finished_at=None if retryable else datetime.now(timezone.utc).isoformat())
+            if retryable:
+                delay = min(30 * (2 ** (attempt_count - 1)), 300)
+                asyncio.create_task(retry_search_later(job_id, data, delay))
         except Exception as update_exc:
             print(f"Falha ao registrar erro do job {job_id}: {update_exc}", flush=True)
     finally:
