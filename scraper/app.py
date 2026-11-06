@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import re
 import secrets
@@ -84,9 +85,22 @@ class SearchCancelled(Exception):
 async def run_search(job_id: str, data: SearchRequest):
     client = db()
     browser = None
+    progress = {
+        "version": 1, "phase": "starting", "detail": "Preparando a pesquisa…",
+        "scanned": 0, "candidates": 0, "with_website": 0,
+        "duplicates": 0, "errors": 0, "saved": 0,
+    }
 
     def update_job(**values):
         client.table("search_jobs").update(values).eq("id", job_id).execute()
+
+    def report_progress(phase=None, detail=None, **counts):
+        if phase is not None:
+            progress["phase"] = phase
+        if detail is not None:
+            progress["detail"] = detail
+        progress.update(counts)
+        update_job(found_count=progress["saved"], message=json.dumps(progress, ensure_ascii=False))
 
     def check_cancelled():
         result = client.table("search_jobs").select("status").eq("id", job_id).maybe_single().execute()
@@ -97,6 +111,7 @@ async def run_search(job_id: str, data: SearchRequest):
     try:
         check_cancelled()
         update_job(status="running")
+        report_progress(phase="opening_maps", detail="Abrindo o Google Maps…")
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
@@ -124,6 +139,7 @@ async def run_search(job_id: str, data: SearchRequest):
             target = "https://www.google.com/maps/search/" + quote(f"{data.category} em {data.city}")
             await page.goto(target, wait_until="domcontentloaded", timeout=60000)
             check_cancelled()
+            report_progress(phase="collecting", detail="Localizando empresas no Google Maps…")
             try:
                 await page.locator('div[role="feed"]').wait_for(timeout=25000)
             except Exception:
@@ -131,7 +147,7 @@ async def run_search(job_id: str, data: SearchRequest):
                 raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
             feed = page.locator('div[role="feed"]')
             links = set()
-            for _ in range(8):
+            for scroll_number in range(8):
                 check_cancelled()
                 anchors = await page.locator('a[href*="/maps/place/"]').all()
                 for anchor in anchors:
@@ -142,8 +158,18 @@ async def run_search(job_id: str, data: SearchRequest):
                     break
                 await feed.evaluate("el => el.scrollBy(0, Math.max(el.scrollHeight, 700))")
                 await page.wait_for_timeout(1000)
+                report_progress(
+                    phase="collecting",
+                    detail=f"Encontrando empresas no Google Maps (varredura {scroll_number + 1}/8)…",
+                    candidates=len(links),
+                )
 
             found = 0
+            report_progress(
+                phase="analyzing",
+                detail=f"{len(links)} empresas encontradas. Analisando cada uma…",
+                candidates=len(links),
+            )
             for maps_url in list(links):
                 check_cancelled()
                 if found >= data.limit:
@@ -156,6 +182,8 @@ async def run_search(job_id: str, data: SearchRequest):
                     title = page.locator("h1").first
                     name = (await title.inner_text()).strip() if await title.count() else ""
                     if not name:
+                        progress["scanned"] += 1
+                        report_progress(detail="Analisando empresas encontradas…")
                         continue
                     address = phone = website = ""
                     for selector, field in [
@@ -174,6 +202,9 @@ async def run_search(job_id: str, data: SearchRequest):
                                 website = await element.get_attribute("href") or ""
 
                     if website.strip():
+                        progress["with_website"] += 1
+                        progress["scanned"] += 1
+                        report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site.")
                         continue
 
                     normalized = digits(phone)
@@ -187,25 +218,43 @@ async def run_search(job_id: str, data: SearchRequest):
                     }
                     existing = client.table("leads").select("id").eq("google_maps_url", maps_url).limit(1).execute()
                     if existing.data:
+                        progress["duplicates"] += 1
+                        progress["scanned"] += 1
+                        report_progress(detail=f"Analisando: {name[:70]} — empresa já cadastrada.")
                         continue
                     if normalized:
                         by_phone = client.table("leads").select("id").eq("phone_normalized", normalized).limit(1).execute()
                         if by_phone.data:
+                            progress["duplicates"] += 1
+                            progress["scanned"] += 1
+                            report_progress(detail=f"Analisando: {name[:70]} — telefone já cadastrado.")
                             continue
                         by_raw_phone = client.table("leads").select("id").eq("phone", phone).limit(1).execute()
                         if by_raw_phone.data:
+                            progress["duplicates"] += 1
+                            progress["scanned"] += 1
+                            report_progress(detail=f"Analisando: {name[:70]} — telefone já cadastrado.")
                             continue
 
                     check_cancelled()
                     client.table("leads").insert(row).execute()
                     found += 1
-                    update_job(found_count=found)
+                    progress["saved"] = found
+                    progress["scanned"] += 1
+                    report_progress(detail=f"Lead salvo: {name[:70]}.")
                 except SearchCancelled:
                     raise
-                except Exception:
-                    continue
+                except Exception as exc:
+                    progress["errors"] += 1
+                    progress["scanned"] += 1
+                    print(f"Erro ao analisar empresa no job {job_id}: {type(exc).__name__}: {str(exc)[:300]}", flush=True)
+                    report_progress(detail="Uma empresa apresentou erro; a pesquisa continuou com as próximas.")
             check_cancelled()
-        update_job(status="completed", found_count=found, finished_at=datetime.now(timezone.utc).isoformat())
+        report_progress(
+            phase="completed",
+            detail="Pesquisa concluída. Confira o resumo da coleta abaixo.",
+        )
+        update_job(status="completed", found_count=found, message=json.dumps(progress, ensure_ascii=False), finished_at=datetime.now(timezone.utc).isoformat())
     except SearchCancelled:
         return
     except Exception as exc:
@@ -213,7 +262,12 @@ async def run_search(job_id: str, data: SearchRequest):
             check_cancelled()
         except SearchCancelled:
             return
-        update_job(status="failed", error=str(exc)[:500], finished_at=datetime.now(timezone.utc).isoformat())
+        progress["phase"] = "failed"
+        progress["detail"] = "A pesquisa foi interrompida por um erro. Consulte a mensagem de erro."
+        try:
+            update_job(status="failed", found_count=progress["saved"], message=json.dumps(progress, ensure_ascii=False), error=str(exc)[:500], finished_at=datetime.now(timezone.utc).isoformat())
+        except Exception as update_exc:
+            print(f"Falha ao registrar erro do job {job_id}: {update_exc}", flush=True)
     finally:
         if browser:
             try:
