@@ -20,3 +20,11 @@
   opacity: .55;
   cursor: wait;
 }
+
+.prospect-actions{display:grid;gap:7px;min-width:140px;align-content:stretch}
+.prospect-actions .prospect-submit{width:100%}
+.prospect-cancel{border:1px solid rgba(237,64,83,.55);border-radius:9px;padding:12px 14px;background:rgba(237,64,83,.12);color:#ff8b97;font-weight:800;cursor:pointer;white-space:nowrap}
+.prospect-cancel:hover{background:rgba(237,64,83,.2)}
+.prospect-cancel:disabled{opacity:.6;cursor:wait}
+@media(max-width:1100px){.prospect-actions{grid-column:1/-1}}
+@media(max-width:720px){.prospect-actions{display:grid;grid-template-columns:1fr 1fr}}

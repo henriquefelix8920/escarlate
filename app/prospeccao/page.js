@@ -49,7 +49,7 @@ export default function ProspeccaoPage() {
   useEffect(() => { loadLeads(); }, [loadLeads]);
 
   useEffect(() => {
-    if (!job?.id || ['completed', 'failed'].includes(job.status)) return;
+    if (!job?.id || ['completed', 'failed', 'cancelled'].includes(job.status)) return;
     const timer = setInterval(async () => {
       try {
         const response = await fetch('/api/jobs/' + encodeURIComponent(job.id), { cache: 'no-store' });
@@ -61,7 +61,7 @@ export default function ProspeccaoPage() {
           lastLoadedFoundCount.current = currentFoundCount;
           await loadLeads();
         }
-        if (['completed', 'failed'].includes(data.status)) {
+        if (['completed', 'failed', 'cancelled'].includes(data.status)) {
           clearInterval(timer);
           setLoading(false);
           await loadLeads();
@@ -89,6 +89,23 @@ export default function ProspeccaoPage() {
       if (!response.ok) throw new Error(data.detail || data.error || 'Não foi possível iniciar a captura.');
       setJob({ ...data, status: data.status || 'queued' });
     } catch (err) { setError(err.message); setLoading(false); }
+  }
+
+
+  async function cancelSearch() {
+    if (!job?.id || !loading) return;
+    setError('');
+    setJob((current) => current ? { ...current, status: 'cancelling', message: 'Solicitando interrupção segura…' } : current);
+    try {
+      const response = await fetch('/api/jobs/' + encodeURIComponent(job.id) + '/cancel', { method: 'POST' });
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data.error || 'Não foi possível parar a pesquisa.');
+      setJob(data);
+      if (data.status === 'cancelled') {
+        setLoading(false);
+        await loadLeads();
+      }
+    } catch (err) { setError(err.message); }
   }
 
   async function updateLead(id, values) {
@@ -169,9 +186,9 @@ export default function ProspeccaoPage() {
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
             <label>Cidade<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
             <label className="limit-field">Quantidade<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[5,10,15].map((n) => <option key={n} value={n}>{n} empresas</option>)}</select></label>
-            <button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>
+            <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
-          {job && <div className="job-status"><strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : 'Pesquisa em andamento'}</strong><span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>{job.found_count !== undefined && <span>{job.found_count} novos leads salvos</span>}</div>}
+          {job && <div className="job-status"><strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : job.status === 'cancelled' ? 'Pesquisa interrompida' : job.status === 'cancelling' ? 'Interrompendo pesquisa…' : 'Pesquisa em andamento'}</strong><span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>{job.found_count !== undefined && <span>{job.found_count} novos leads salvos</span>}</div>}
           <p className="prospect-hint">A captura utiliza informações públicas do Google Maps. Empresas com site identificado são descartadas.</p>
         </section>
 
