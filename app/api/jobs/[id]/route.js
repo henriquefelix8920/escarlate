@@ -2,6 +2,18 @@ import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
+async function readJsonResponse(response) {
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error(`O serviço de captura retornou uma resposta vazia (HTTP ${response.status}). A pesquisa continuará sendo consultada automaticamente.`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`O serviço de captura retornou uma resposta inválida (HTTP ${response.status}). A pesquisa continuará sendo consultada automaticamente.`);
+  }
+}
+
 export async function GET(_request, { params }) {
   try {
     const rawBase = process.env.SCRAPER_SERVICE_URL || '';
@@ -11,7 +23,7 @@ export async function GET(_request, { params }) {
     const response = await fetch(`${base}/api/jobs/${encodeURIComponent(params.id)}`, {
       headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
     });
-    const payload = await response.json();
+    const payload = await readJsonResponse(response);
     return NextResponse.json(payload, { status: response.status });
   } catch (error) {
     return NextResponse.json({ error: error.message || 'Não foi possível consultar a pesquisa.' }, { status: 503 });
