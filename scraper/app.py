@@ -336,11 +336,13 @@ async def _run_search(job_id: str, data: SearchRequest):
                         update_job(next_candidate_index=candidate_index + 1,
                                    last_heartbeat_at=datetime.now(timezone.utc).isoformat())
                 check_cancelled()
+                if batch_index + 1 < total_batches:
+                    await page.wait_for_timeout(1500)
         report_progress(
             phase="completed",
             detail=f"Pesquisa concluída após {progress.get('batch', 0)} lote(s). Confira o resumo abaixo.",
         )
-        update_job(status="completed", found_count=found, message=json.dumps(progress, ensure_ascii=False), finished_at=datetime.now(timezone.utc).isoformat())
+        update_job(status="completed", found_count=found, message=json.dumps(progress, ensure_ascii=False), error=None, finished_at=datetime.now(timezone.utc).isoformat())
     except SearchCancelled:
         return
     except Exception as exc:
