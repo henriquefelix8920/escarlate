@@ -36,8 +36,9 @@ create table if not exists public.search_jobs (
   term text not null,
   city text not null,
   status text not null default 'queued'
-    check (status in ('queued','running','completed','failed')),
-  requested_limit integer not null default 10 check (requested_limit between 1 and 50),
+    check (status in ('queued','running','cancelling','completed','failed','cancelled')),
+  requested_limit integer not null default 10 check (requested_limit between 1 and 100),
+  message text,
   found_count integer not null default 0,
   error text,
   created_at timestamptz not null default now(),
