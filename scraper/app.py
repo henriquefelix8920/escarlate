@@ -59,10 +59,7 @@ def cancel_job(job_id: str):
         current = result.data
         if current.get("status") in {"completed", "failed", "cancelled"}:
             return current
-        client.table("search_jobs").update({
-            "status": "cancelling",
-            "message": "Interrupção solicitada pelo usuário.",
-        }).eq("id", job_id).execute()
+        client.table("search_jobs").update({"status": "cancelling"}).eq("id", job_id).execute()
         return {**current, "status": "cancelling", "message": "Interrupção solicitada. A captura será encerrada com segurança."}
     except HTTPException:
         raise
@@ -94,12 +91,12 @@ async def run_search(job_id: str, data: SearchRequest):
     def check_cancelled():
         result = client.table("search_jobs").select("status").eq("id", job_id).maybe_single().execute()
         if result.data and result.data.get("status") in {"cancelling", "cancelled"}:
-            update_job(status="cancelled", message="Pesquisa interrompida pelo usuário.", finished_at=datetime.now(timezone.utc).isoformat())
+            update_job(status="cancelled", finished_at=datetime.now(timezone.utc).isoformat())
             raise SearchCancelled()
 
     try:
         check_cancelled()
-        update_job(status="running", message="Coletando empresas…")
+        update_job(status="running")
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
@@ -208,7 +205,7 @@ async def run_search(job_id: str, data: SearchRequest):
                 except Exception:
                     continue
             check_cancelled()
-        update_job(status="completed", found_count=found, message="Pesquisa concluída.", finished_at=datetime.now(timezone.utc).isoformat())
+        update_job(status="completed", found_count=found, finished_at=datetime.now(timezone.utc).isoformat())
     except SearchCancelled:
         return
     except Exception as exc:
