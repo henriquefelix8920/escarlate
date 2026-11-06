@@ -41,10 +41,7 @@ def health():
 @app.post("/api/search", dependencies=[Depends(require_token)])
 async def start_search(data: SearchRequest, background: BackgroundTasks):
     job_id = str(uuid.uuid4())
-    row = {
-        "id": job_id, "term": data.category, "city": data.city,
-        "status": "queued", "requested_limit": data.limit, "found_count": 0,
-    }
+    row = {"id": job_id, "term": data.category, "city": data.city, "status": "queued", "requested_limit": data.limit, "found_count": 0}
     try:
         db().table("search_jobs").insert(row).execute()
     except Exception as exc:
@@ -80,7 +77,6 @@ async def run_search(job_id: str, data: SearchRequest):
             except Exception:
                 await browser.close()
                 raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
-
             feed = page.locator('div[role="feed"]')
             links = set()
             for _ in range(8):
@@ -89,13 +85,15 @@ async def run_search(job_id: str, data: SearchRequest):
                     href = await anchor.get_attribute("href")
                     if href:
                         links.add(href)
-                if len(links) >= data.limit:
+                if len(links) >= data.limit * 3:
                     break
                 await feed.evaluate("el => el.scrollBy(0, Math.max(el.scrollHeight, 700))")
                 await page.wait_for_timeout(1000)
 
             found = 0
-            for index, maps_url in enumerate(list(links)[:data.limit]):
+            for maps_url in list(links):
+                if found >= data.limit:
+                    break
                 try:
                     await page.goto(maps_url, wait_until="domcontentloaded", timeout=30000)
                     await page.wait_for_timeout(800)
@@ -119,28 +117,32 @@ async def run_search(job_id: str, data: SearchRequest):
                             else:
                                 website = await element.get_attribute("href") or ""
 
+                    # A lista comercial deve conter apenas empresas sem site identificado.
+                    if website.strip():
+                        continue
+
                     normalized = digits(phone)
                     row = {
                         "name": name[:200], "category": data.category,
                         "phone": phone or None, "phone_normalized": normalized or None,
-                        "website": website or None, "address": address or None,
+                        "website": None, "address": address or None,
                         "city": data.city, "google_maps_url": maps_url,
                         "source": "google_maps", "search_term": f"{data.category} em {data.city}",
                         "status": "new",
                     }
                     existing = client.table("leads").select("id").eq("google_maps_url", maps_url).limit(1).execute()
                     if existing.data:
-                        client.table("leads").update(row).eq("id", existing.data[0]["id"]).execute()
-                    elif normalized:
+                        # Não sobrescreve etapa, observações ou valor de um lead já trabalhado.
+                        continue
+                    if normalized:
                         by_phone = client.table("leads").select("id").eq("phone_normalized", normalized).limit(1).execute()
                         if by_phone.data:
-                            client.table("leads").update(row).eq("id", by_phone.data[0]["id"]).execute()
-                        else:
-                            client.table("leads").insert(row).execute()
-                            found += 1
-                    else:
-                        client.table("leads").insert(row).execute()
-                        found += 1
+                            # O telefone já identifica uma empresa cadastrada: preserva o registro existente.
+                            continue
+
+                    # Só conta e publica no progresso depois que o novo lead foi salvo.
+                    client.table("leads").insert(row).execute()
+                    found += 1
                     update_job(found_count=found)
                 except Exception:
                     continue
