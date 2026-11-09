@@ -162,6 +162,11 @@ export default function ProspeccaoPage() {
     } catch { return null; }
   })();
 
+  const heartbeatAgeSeconds = job?.last_heartbeat_at
+    ? Math.max(0, Math.floor((Date.now() - new Date(job.last_heartbeat_at).getTime()) / 1000))
+    : null;
+  const jobLooksStalled = job?.status === 'running' && heartbeatAgeSeconds !== null && heartbeatAgeSeconds > 90;
+
   const visible = noSite.filter((lead) => {
     const matchesFilter = filter === 'all' || (filter === 'pending' ? lead.status === 'new' : lead.status === filter);
     const text = [lead.name, lead.phone, lead.city, lead.address, lead.category].filter(Boolean).join(' ').toLowerCase();
@@ -205,11 +210,11 @@ export default function ProspeccaoPage() {
           </form>
           <div className="shared-job-heading"><strong>ACOMPANHAMENTO DA PESQUISA</strong><span>Sincronizado automaticamente entre seus aparelhos</span></div>
           {!job && <div className="job-status job-idle"><strong>Nenhuma pesquisa registrada</strong><span>Quando uma pesquisa for iniciada em qualquer aparelho, o andamento aparecerá aqui.</span></div>}
-          {job && <div className="job-status">
-            <strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : job.status === 'cancelled' ? 'Pesquisa interrompida' : job.status === 'cancelling' ? 'Interrompendo pesquisa…' : job.status === 'retry_wait' ? 'Preparando retomada automática…' : 'Pesquisa em andamento'}</strong>
+          {job && <div className={"job-status" + (jobLooksStalled ? " job-stale" : "")}>
+            <strong>{jobLooksStalled ? 'Sem atualização recente — possível pausa' : job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : job.status === 'cancelled' ? 'Pesquisa interrompida' : job.status === 'cancelling' ? 'Interrompendo pesquisa…' : job.status === 'retry_wait' ? 'Preparando retomada automática…' : job.status === 'queued' ? 'Pesquisa aguardando início' : 'Pesquisa em andamento'}</strong>
             {jobProgress ? <>
               <span>{jobProgress.detail}</span>
-              {job.last_heartbeat_at && <span>Última atividade registrada: {new Date(job.last_heartbeat_at).toLocaleString("pt-BR")}</span>}
+              {job.last_heartbeat_at && <span>Última atividade: {heartbeatAgeSeconds < 60 ? "há menos de 1 min" : "há " + Math.floor(heartbeatAgeSeconds / 60) + " min"} ({new Date(job.last_heartbeat_at).toLocaleString("pt-BR")})</span>}
               {jobProgress.total_batches > 0 && <span>Lote {jobProgress.batch || 0} de {jobProgress.total_batches} · análise em grupos de até 20 empresas</span>}
               <div className="job-progress-stats">
                 <span><b>{jobProgress.scanned || 0}</b> analisadas de <b>{jobProgress.candidates || 0}</b> encontradas</span>
