@@ -48,32 +48,38 @@ export default function ProspeccaoPage() {
 
   useEffect(() => { loadLeads(); }, [loadLeads]);
 
-  useEffect(() => {
-    if (!job?.id || ['completed', 'failed', 'cancelled'].includes(job.status)) return;
-    const timer = setInterval(async () => {
-      try {
-        const response = await fetch('/api/jobs/' + encodeURIComponent(job.id), { cache: 'no-store' });
-        const data = await readJson(response);
-        if (!response.ok) throw new Error(data.detail || data.error || 'Falha ao consultar pesquisa.');
-        setError('');
-        setJob(data);
-        const currentFoundCount = Number(data.found_count || 0);
-        if (currentFoundCount > lastLoadedFoundCount.current) {
-          lastLoadedFoundCount.current = currentFoundCount;
-          await loadLeads();
-        }
-        if (['completed', 'failed', 'cancelled'].includes(data.status)) {
-          clearInterval(timer);
-          setLoading(false);
-          await loadLeads();
-        }
-      } catch (err) {
-        // Uma falha temporária de consulta não interrompe o acompanhamento da pesquisa.
-        setError(err.message);
+  const lastLoadedTerminalJob = useRef("");
+
+  const refreshJob = useCallback(async () => {
+    try {
+      const response = await fetch('/api/jobs/active', { cache: 'no-store' });
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data.detail || data.error || 'Falha ao consultar pesquisa.');
+      setError('');
+      const currentJob = data?.id ? data : null;
+      setJob(currentJob);
+      const active = currentJob && ['queued', 'running', 'retry_wait', 'cancelling'].includes(currentJob.status);
+      setLoading(Boolean(active));
+      const currentFoundCount = Number(currentJob?.found_count || 0);
+      if (currentFoundCount > lastLoadedFoundCount.current) {
+        lastLoadedFoundCount.current = currentFoundCount;
+        await loadLeads();
       }
-    }, 3000);
+      if (currentJob && ['completed', 'failed', 'cancelled'].includes(currentJob.status) && lastLoadedTerminalJob.current !== currentJob.id) {
+        lastLoadedTerminalJob.current = currentJob.id;
+        await loadLeads();
+      }
+    } catch (err) {
+      // Uma falha temporária de consulta não interrompe o acompanhamento da pesquisa.
+      setError(err.message);
+    }
+  }, [loadLeads]);
+
+  useEffect(() => {
+    refreshJob();
+    const timer = setInterval(refreshJob, 3000);
     return () => clearInterval(timer);
-  }, [job?.id, job?.status, loadLeads]);
+  }, [refreshJob]);
 
   async function startSearch(event) {
     event.preventDefault();
@@ -197,10 +203,13 @@ export default function ProspeccaoPage() {
             <label className="limit-field">Meta de leads<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[20,40,60,100].map((n) => <option key={n} value={n}>{n} leads</option>)}</select></label>
             <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
+          <div className="shared-job-heading"><strong>ACOMPANHAMENTO DA PESQUISA</strong><span>Sincronizado automaticamente entre seus aparelhos</span></div>
+          {!job && <div className="job-status job-idle"><strong>Nenhuma pesquisa registrada</strong><span>Quando uma pesquisa for iniciada em qualquer aparelho, o andamento aparecerá aqui.</span></div>}
           {job && <div className="job-status">
             <strong>{job.status === 'completed' ? 'Pesquisa concluída' : job.status === 'failed' ? 'Pesquisa não concluída' : job.status === 'cancelled' ? 'Pesquisa interrompida' : job.status === 'cancelling' ? 'Interrompendo pesquisa…' : job.status === 'retry_wait' ? 'Preparando retomada automática…' : 'Pesquisa em andamento'}</strong>
             {jobProgress ? <>
               <span>{jobProgress.detail}</span>
+              {job.last_heartbeat_at && <span>Última atividade registrada: {new Date(job.last_heartbeat_at).toLocaleString("pt-BR")}</span>}
               {jobProgress.total_batches > 0 && <span>Lote {jobProgress.batch || 0} de {jobProgress.total_batches} · análise em grupos de até 20 empresas</span>}
               <div className="job-progress-stats">
                 <span><b>{jobProgress.scanned || 0}</b> analisadas de <b>{jobProgress.candidates || 0}</b> encontradas</span>
