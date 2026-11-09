@@ -34,3 +34,8 @@
 .job-progress-stats span{display:inline-flex;gap:4px;align-items:center;padding:6px 9px;border:1px solid rgba(255,255,255,.09);border-radius:7px;background:rgba(255,255,255,.035);font-size:.72rem}
 .job-progress-stats b{color:#fff;font-variant-numeric:tabular-nums}
 .job-status>span{line-height:1.5}
+
+
+.shared-job-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:16px;color:#aeb4c2;font-size:.68rem;letter-spacing:.1em}
+.shared-job-heading span{color:#7f8799;font-size:.68rem;letter-spacing:0}
+.job-idle{border:1px dashed var(--crm-line);background:#11141d}
