@@ -84,6 +84,23 @@ def cancel_job(job_id: str):
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Could not cancel search: {str(exc)[:180]}")
 
+@app.get("/api/jobs/active", dependencies=[Depends(require_token)])
+def get_active_job():
+    try:
+        client = db()
+        active = client.table("search_jobs").select("*").in_(
+            "status", ["queued", "running", "retry_wait", "cancelling"]
+        ).order("created_at", desc=True).limit(1).execute()
+        if active.data:
+            return active.data[0]
+        latest = client.table("search_jobs").select("*").order(
+            "created_at", desc=True
+        ).limit(1).execute()
+        return latest.data[0] if latest.data else {"status": "idle"}
+    except Exception as exc:
+        print(f"Falha ao consultar pesquisa ativa: {type(exc).__name__}: {str(exc)[:400]}", flush=True)
+        raise HTTPException(status_code=503, detail=f"Could not read active search: {str(exc)[:180]}")
+
 @app.get("/api/jobs/{job_id}", dependencies=[Depends(require_token)])
 def get_job(job_id: str):
     try:
@@ -148,7 +165,11 @@ async def _run_search(job_id: str, data: SearchRequest):
         if detail is not None:
             progress["detail"] = detail
         progress.update(counts)
-        update_job(found_count=progress["saved"], message=json.dumps(progress, ensure_ascii=False))
+        update_job(
+            found_count=progress["saved"],
+            message=json.dumps(progress, ensure_ascii=False),
+            last_heartbeat_at=datetime.now(timezone.utc).isoformat(),
+        )
 
     def check_cancelled():
         result = client.table("search_jobs").select("status").eq("id", job_id).limit(1).execute()
