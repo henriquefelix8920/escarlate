@@ -61,7 +61,14 @@ async def start_search(data: SearchRequest, background: BackgroundTasks):
     job_id = str(uuid.uuid4())
     row = {"id": job_id, "term": data.category, "city": data.city, "status": "queued", "requested_limit": data.limit, "found_count": 0}
     try:
-        db().table("search_jobs").insert(row).execute()
+        client = db()
+        active = client.table("search_jobs").select("*").in_(
+            "status", ["queued", "running", "retry_wait", "cancelling"]
+        ).order("created_at", desc=False).limit(1).execute()
+        if active.data:
+            # Pesquisas são globais: um segundo aparelho acompanha a ativa em vez de iniciar outra.
+            return active.data[0]
+        client.table("search_jobs").insert(row).execute()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Could not create search job: {str(exc)[:180]}")
     background.add_task(run_search, job_id, data)
@@ -90,7 +97,7 @@ def get_active_job():
         client = db()
         active = client.table("search_jobs").select("*").in_(
             "status", ["queued", "running", "retry_wait", "cancelling"]
-        ).order("created_at", desc=True).limit(1).execute()
+        ).order("created_at", desc=False).limit(1).execute()
         if active.data:
             return active.data[0]
         latest = client.table("search_jobs").select("*").order(
