@@ -35,6 +35,7 @@ export default function ProspeccaoPage() {
   const [filter, setFilter] = useState('all');
   const [saving, setSaving] = useState({});
   const lastLoadedFoundCount = useRef(0);
+  const lastObservedJobId = useRef("");
 
   const loadLeads = useCallback(async () => {
     try {
@@ -57,6 +58,11 @@ export default function ProspeccaoPage() {
       if (!response.ok) throw new Error(data.detail || data.error || 'Falha ao consultar pesquisa.');
       setError('');
       const currentJob = data?.id ? data : null;
+      if ((currentJob?.id || "") !== lastObservedJobId.current) {
+        lastObservedJobId.current = currentJob?.id || "";
+        lastLoadedFoundCount.current = 0;
+        lastLoadedTerminalJob.current = "";
+      }
       setJob(currentJob);
       const active = currentJob && ['queued', 'running', 'retry_wait', 'cancelling'].includes(currentJob.status);
       setLoading(Boolean(active));
