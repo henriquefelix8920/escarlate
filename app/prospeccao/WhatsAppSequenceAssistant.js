@@ -22,9 +22,8 @@ function createId() {
 
 function renderMessage(message, values) {
   return String(message || '')
-    .replace(/\\{([a-z_]+)\\}/gi, (_, key) => String(values[key.toLowerCase()] || ''))
-    .replace(/[ \\t]{2,}/g, ' ')
-    .replace(/\\n[ \\t]+/g, '\\n')
+    .replace(/\{([a-z_]+)\}/gi, (_, key) => String(values[key.toLowerCase()] || ''))
+    .replace(/[ \t]{2,}/g, ' ')
     .trim();
 }
 
@@ -99,7 +98,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
 
   const values = {
     nome: contactName,
-    primeiro_nome: contactName.trim().split(/\\s+/)[0] || '',
+    primeiro_nome: contactName.trim().split(/\s+/)[0] || '',
     tratamento: contactTreatment,
     cidade: lead.city || lead.address || '',
     categoria: lead.category || '',
@@ -109,22 +108,46 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
   const currentMessage = renderedMessages[currentStep] || '';
 
   function startConversation() {
-    const sequence = activeSequence;
-    const key = `${lead.id}:${sequence.id}`;
-    const step = Math.min(
-      Math.max(0, Number(progress[key] || 0)),
-      sequence.messages.length,
-    );
+    let latestSequences = sequences;
+    let latestProgress = progress;
+    try {
+      const savedSequences = window.localStorage.getItem(SEQUENCES_KEY);
+      if (savedSequences) {
+        const parsed = JSON.parse(savedSequences);
+        const valid = Array.isArray(parsed)
+          ? parsed.filter((item) => item && item.id && item.name && Array.isArray(item.messages) && item.messages.length)
+          : [];
+        if (valid.length) latestSequences = valid;
+      }
+      const savedProgress = window.localStorage.getItem(PROGRESS_KEY);
+      if (savedProgress) {
+        const parsed = JSON.parse(savedProgress);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) latestProgress = parsed;
+      }
+    } catch {
+      // Usa os dados já carregados se o armazenamento local não puder ser lido.
+    }
+
+    const sequence = latestSequences.find((item) => item.id === selectedSequenceId) || latestSequences[0] || DEFAULT_SEQUENCE;
+    const key = \`\${lead.id}:\${sequence.id}\`;
+    const savedStep = Math.min(Math.max(0, Number(latestProgress[key] || 0)), sequence.messages.length);
+    const step = savedStep >= sequence.messages.length ? 0 : savedStep;
+    if (step !== savedStep) latestProgress = { ...latestProgress, [key]: 0 };
+
+    const defaultTreatment = /nutri/i.test(String(lead.category || '')) ? 'Dra.' : '';
     const defaultText = renderMessage(sequence.messages[step] || sequence.messages[0], {
       nome: lead.name || '',
-      primeiro_nome: String(lead.name || '').trim().split(/\\s+/)[0] || '',
-      tratamento: '',
+      primeiro_nome: String(lead.name || '').trim().split(/\s+/)[0] || '',
+      tratamento: defaultTreatment,
       cidade: lead.city || lead.address || '',
       categoria: lead.category || '',
     });
 
+    setSequences(latestSequences);
+    setProgress(latestProgress);
+    setSelectedSequenceId(sequence.id);
     setContactName(lead.name || '');
-    setContactTreatment('');
+    setContactTreatment(defaultTreatment);
     setFeedback('');
     setScreen('flow');
     setIsOpen(true);
