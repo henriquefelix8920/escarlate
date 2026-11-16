@@ -307,14 +307,14 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
     // Abre uma aba vazia de forma síncrona para evitar o bloqueio de pop-ups
     // enquanto o CRM salva a etapa comercial e registra o contato no banco.
     const whatsappWindow = window.open('about:blank', '_blank');
-    if (!whatsappWindow) {
-      setFeedback('O navegador bloqueou a nova aba. Permita pop-ups para o Escarlate e tente novamente.');
-      return;
-    }
 
     try {
       if (onContactConfirmed) {
         await onContactConfirmed(lead.id, 'whatsapp', 'interested');
+      }
+      if (!whatsappWindow) {
+        setFeedback('Lead atualizado para Interessado, mas o navegador bloqueou a aba do WhatsApp. Permita pop-ups para abrir a mensagem.');
+        return;
       }
       if (whatsappWindow.closed) {
         setFeedback('Lead atualizado para Interessado, mas a aba do WhatsApp foi fechada antes de abrir a mensagem.');
@@ -324,8 +324,8 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
       whatsappWindow.opener = null;
       setFeedback('Lead atualizado para Interessado. Mensagem com o site de demonstração aberta no WhatsApp; confira e toque em Enviar.');
     } catch (error) {
-      whatsappWindow.close();
-      setFeedback(`Não consegui atualizar o lead para Interessado e registrar o contato: ${error.message} Tente novamente.`);
+      if (whatsappWindow && !whatsappWindow.closed) whatsappWindow.close();
+      setFeedback(`Não consegui concluir a atualização do lead e registrar o contato: ${error.message} Tente novamente.`);
     }
   }
 
