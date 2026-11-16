@@ -286,7 +286,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
     window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
   }
 
-  function openSampleWebsiteInWhatsApp() {
+  async function openSampleWebsiteInWhatsApp() {
     if (!whatsappUrl) {
       setFeedback('Este lead não possui um número de WhatsApp válido para abrir a conversa.');
       return;
@@ -304,8 +304,29 @@ Esse link é uma referência visual. O seu site seria desenvolvido sob medida pa
 
 A ideia é criar um site com a sua identidade, que valorize o seu trabalho e transmita confiança desde o primeiro acesso. Dê uma olhadinha e me conte o que achou! 😊`;
 
-    window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
-    setFeedback('Mensagem com o site de demonstração aberta no WhatsApp. Confira o texto e toque em Enviar.');
+    // Abre uma aba vazia de forma síncrona para evitar o bloqueio de pop-ups
+    // enquanto o CRM salva a etapa comercial e registra o contato no banco.
+    const whatsappWindow = window.open('about:blank', '_blank');
+    if (!whatsappWindow) {
+      setFeedback('O navegador bloqueou a nova aba. Permita pop-ups para o Escarlate e tente novamente.');
+      return;
+    }
+
+    try {
+      if (onContactConfirmed) {
+        await onContactConfirmed(lead.id, 'whatsapp', 'interested');
+      }
+      if (whatsappWindow.closed) {
+        setFeedback('Lead atualizado para Interessado, mas a aba do WhatsApp foi fechada antes de abrir a mensagem.');
+        return;
+      }
+      whatsappWindow.location.href = withMessage(whatsappUrl, message);
+      whatsappWindow.opener = null;
+      setFeedback('Lead atualizado para Interessado. Mensagem com o site de demonstração aberta no WhatsApp; confira e toque em Enviar.');
+    } catch (error) {
+      whatsappWindow.close();
+      setFeedback(`Não consegui atualizar o lead para Interessado e registrar o contato: ${error.message} Tente novamente.`);
+    }
   }
 
   async function copyCurrentMessage() {
@@ -322,14 +343,18 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
   async function markCurrentAsSent() {
     if (currentStep >= activeSequence.messages.length) return;
 
+    const nextStep = currentStep + 1;
+    const isFinalStep = nextStep >= activeSequence.messages.length;
+
     try {
-      if (onContactConfirmed) await onContactConfirmed(lead.id, 'whatsapp');
+      if (onContactConfirmed) {
+        await onContactConfirmed(lead.id, 'whatsapp', isFinalStep ? 'contacted' : null);
+      }
     } catch (error) {
-      setFeedback(`Não consegui registrar este contato no contador de hoje: ${error.message} Tente confirmar novamente.`);
+      setFeedback(`Não consegui registrar o contato e atualizar a etapa do lead: ${error.message} Tente confirmar novamente.`);
       return;
     }
 
-    const nextStep = currentStep + 1;
     const updatedProgress = { ...progress, [progressKey]: nextStep };
     setProgress(updatedProgress);
     try {
