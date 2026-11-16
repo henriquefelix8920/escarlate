@@ -11,6 +11,24 @@ const stages = [
 ];
 const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(Number(value || 0));
 const digits = (value) => String(value || '').replace(/\D/g, '');
+
+const socialProfile = (lead) => {
+  const url = String(lead.instagram || lead.profile || '').trim();
+  if (!url) return null;
+  let host = '';
+  try { host = new URL(url.startsWith('http') ? url : 'https://' + url).hostname.toLowerCase().replace(/^www\./, ''); } catch {}
+  const labels = [
+    ['instagram.com', 'Instagram'], ['facebook.com', 'Facebook'], ['fb.com', 'Facebook'],
+    ['tiktok.com', 'TikTok'], ['linkedin.com', 'LinkedIn'], ['youtube.com', 'YouTube'],
+    ['youtu.be', 'YouTube'], ['x.com', 'X'], ['twitter.com', 'X'],
+    ['threads.net', 'Threads'], ['pinterest.com', 'Pinterest'], ['snapchat.com', 'Snapchat'],
+    ['kwai.com', 'Kwai'], ['whatsapp.com', 'WhatsApp'], ['wa.me', 'WhatsApp'],
+    ['linktr.ee', 'Link na bio'], ['beacons.ai', 'Link na bio'], ['bio.site', 'Link na bio'],
+    ['solo.to', 'Link na bio'], ['msha.ke', 'Link na bio'], ['campsite.bio', 'Link na bio'],
+  ];
+  const match = labels.find(([domain]) => host === domain || host.endsWith('.' + domain));
+  return { url: url.startsWith('http') ? url : 'https://' + url, label: match?.[1] || 'Perfil social' };
+};
 async function readJson(response) {
   const text = await response.text();
   if (!text.trim()) throw new Error(`O servidor retornou uma resposta vazia (HTTP ${response.status}). Tente novamente.`);
@@ -176,7 +194,7 @@ export default function ProspeccaoPage() {
 
   const visible = noSite.filter((lead) => {
     const matchesFilter = filter === 'all' || (filter === 'pending' ? lead.status === 'new' : lead.status === filter);
-    const text = [lead.name, lead.phone, lead.city, lead.address, lead.category].filter(Boolean).join(' ').toLowerCase();
+    const text = [lead.name, lead.phone, lead.city, lead.address, lead.category, lead.instagram, lead.profile].filter(Boolean).join(' ').toLowerCase();
     return matchesFilter && text.includes(query.toLowerCase());
   });
 
@@ -227,6 +245,7 @@ export default function ProspeccaoPage() {
                 <span><b>{jobProgress.scanned || 0}</b> analisadas de <b>{jobProgress.candidates || 0}</b> encontradas</span>
                 <span><b>{jobProgress.saved || 0}</b> leads salvos</span>
                 <span><b>{jobProgress.with_website || 0}</b> descartadas por já terem site</span>
+                <span><b>{jobProgress.with_social || 0}</b> com redes sociais (ainda sem site)</span>
                 <span><b>{jobProgress.duplicates || 0}</b> duplicadas</span>
                 <span><b>{jobProgress.errors || 0}</b> com erro</span>
               </div>
@@ -245,8 +264,9 @@ export default function ProspeccaoPage() {
             {visible.length === 0 ? <div className="empty-crm">{noSite.length ? 'Nenhum lead corresponde a esse filtro.' : 'Ainda não há leads sem site. Faça uma pesquisa acima para encontrar oportunidades.'}</div> :
               visible.map((lead) => {
                 const wa = whatsapp(lead.phone);
+                const social = socialProfile(lead);
                 return <article className="prospect-lead" key={lead.id}>
-                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}</div><div className="lead-actions">{wa ? <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} /> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa ? <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} /> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
                   <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
                 </article>;
               })
