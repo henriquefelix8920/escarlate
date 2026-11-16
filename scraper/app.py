@@ -125,7 +125,10 @@ async def recover_interrupted_jobs():
 
             stale = (
                 (status == "running" and (
-                    heartbeat_age is None and (created_age is None or created_age > 180)
+                    # Uma busca nunca deve ser retomada depois de ficar aberta por mais
+                    # de uma hora, mesmo que um processo antigo tenha atualizado o heartbeat.
+                    created_age is None or created_age > 3600
+                    or heartbeat_age is None and created_age > 180
                     or heartbeat_age is not None and heartbeat_age > 180
                 ))
                 or (status == "queued" and created_age is not None and created_age > 600)
