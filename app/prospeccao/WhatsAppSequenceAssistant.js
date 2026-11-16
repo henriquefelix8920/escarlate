@@ -348,12 +348,14 @@ A ideia é criar algo com a sua identidade, reunindo suas informações, serviç
 
 Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para você? É sem compromisso e levo só um instante para te apresentar. 😊`;
 
-    const whatsappWindow = window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
+    const whatsappWindow = window.open('about:blank', '_blank');
     if (!whatsappWindow) {
       setFollowUpFeedback('O navegador bloqueou a abertura do WhatsApp. Permita pop-ups e tente novamente.');
       return;
     }
 
+    whatsappWindow.location.href = withMessage(whatsappUrl, message);
+    whatsappWindow.opener = null;
     setFollowUpAwaitingConfirmation(true);
     setFollowUpFeedback('Mensagem preparada no WhatsApp. Confira o texto e toque em Enviar; depois confirme aqui no CRM.');
   }
