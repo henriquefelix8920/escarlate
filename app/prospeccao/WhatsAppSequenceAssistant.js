@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 const SEQUENCES_KEY = 'escarlate:whatsapp-sequences:v1';
 const PROGRESS_KEY = 'escarlate:whatsapp-sequence-progress:v1';
+const SAMPLE_WEBSITE_URL = 'https://nutricionista-fawn.vercel.app/';
 
 const DEFAULT_SEQUENCE = {
   id: 'nutricionistas-primeira-abordagem',
@@ -285,6 +286,28 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
     window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
   }
 
+  function openSampleWebsiteInWhatsApp() {
+    if (!whatsappUrl) {
+      setFeedback('Este lead não possui um número de WhatsApp válido para abrir a conversa.');
+      return;
+    }
+
+    const greetingName = [contactTreatment.trim(), contactName.trim()].filter(Boolean).join(' ');
+    const greeting = greetingName ? `Perfeito, ${greetingName}! 😊` : 'Perfeito! 😊';
+    const message = `${greeting}
+
+Separei uma demonstração para você visualizar como poderia ficar o seu site profissional:
+
+${SAMPLE_WEBSITE_URL}
+
+Esse link é uma referência visual. O seu site seria desenvolvido sob medida para você, com uma identidade visual alinhada ao seu estilo: paleta de cores, suas informações, especialidades e serviços, fotos, apresentação profissional e formas práticas para novos pacientes entrarem em contato ou agendarem.
+
+A ideia é criar um site com a sua identidade, que valorize o seu trabalho e transmita confiança desde o primeiro acesso. Dê uma olhadinha e me conte o que achou! 😊`;
+
+    window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
+    setFeedback('Mensagem com o site de demonstração aberta no WhatsApp. Confira o texto e toque em Enviar.');
+  }
+
   async function copyCurrentMessage() {
     const message = renderMessage(activeSequence.messages[currentStep], { ...values, saudacao: getGreeting() });
     if (!message) return;
@@ -450,8 +473,13 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
                 <footer className="wa-sequence-footer">
                   {currentStep < activeSequence.messages.length
                     ? <button type="button" className="wa-sequence-open" onClick={openCurrentMessageInWhatsApp}>Abrir WhatsApp com a mensagem atual</button>
-                    : <button type="button" className="wa-sequence-secondary" onClick={resetProgress}>Reiniciar sequência para este lead</button>}
-                  <p>Depois de enviar uma mensagem, clique em “Já enviei — abrir próxima no WhatsApp”. A próxima conversa será aberta com o texto preenchido; confira e toque em Enviar. O Escarlate nunca dispara mensagens sozinho.</p>
+                    : (
+                      <div className="wa-sequence-message-actions">
+                        <button type="button" className="wa-sequence-primary" onClick={openSampleWebsiteInWhatsApp}>Lead aceitou — enviar site de demonstração</button>
+                        <button type="button" className="wa-sequence-secondary" onClick={resetProgress}>Reiniciar sequência para este lead</button>
+                      </div>
+                    )}
+                  <p>Depois de enviar cada mensagem, confirme a etapa para avançar. Quando a sequência terminar, use “Lead aceitou — enviar site de demonstração” somente se a pessoa quiser ver o exemplo. Confira o texto no WhatsApp e toque em Enviar. O Escarlate nunca dispara mensagens sozinho.</p>
                 </footer>
               </>
             )}
