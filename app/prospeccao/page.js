@@ -72,6 +72,18 @@ export default function ProspeccaoPage() {
 
   useEffect(() => { loadLeads(); }, [loadLeads]);
 
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') loadLeads();
+    };
+    const timer = window.setInterval(refreshWhenVisible, 60000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [loadLeads]);
+
   const loadContactedToday = useCallback(async () => {
     const response = await fetch('/api/contacts/today', { cache: 'no-store' });
     const data = await readJson(response);
