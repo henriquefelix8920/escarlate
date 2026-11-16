@@ -173,10 +173,29 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
 
   function markCurrentAsSent() {
     if (currentStep >= activeSequence.messages.length) return;
-    setProgress((old) => ({ ...old, [progressKey]: currentStep + 1 }));
-    setFeedback(currentStep + 1 === activeSequence.messages.length
-      ? 'Sequência concluída. Você confirmou o envio de todas as mensagens.'
-      : 'Etapa marcada. A próxima mensagem está pronta.');
+
+    const nextStep = currentStep + 1;
+    const updatedProgress = { ...progress, [progressKey]: nextStep };
+    setProgress(updatedProgress);
+    try {
+      window.localStorage.setItem(PROGRESS_KEY, JSON.stringify(updatedProgress));
+    } catch {
+      // O progresso continua atualizado na tela mesmo se o armazenamento falhar.
+    }
+
+    if (nextStep >= activeSequence.messages.length) {
+      setFeedback('Última mensagem confirmada. Sequência concluída.');
+      return;
+    }
+
+    const nextMessage = renderedMessages[nextStep];
+    if (whatsappUrl && nextMessage) {
+      window.open(withMessage(whatsappUrl, nextMessage), '_blank', 'noopener,noreferrer');
+      setFeedback(`Mensagem ${nextStep + 1} de ${activeSequence.messages.length} aberta no WhatsApp. Confira o texto e toque em Enviar.`);
+      return;
+    }
+
+    setFeedback('Etapa marcada. A próxima mensagem está pronta para copiar ou abrir manualmente.');
   }
 
   function resetProgress() {
@@ -295,7 +314,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
                         {isCurrent && (
                           <div className="wa-sequence-message-actions">
                             <button type="button" className="wa-sequence-secondary" onClick={copyCurrentMessage}>Copiar mensagem</button>
-                            <button type="button" className="wa-sequence-primary" onClick={markCurrentAsSent}>Já enviei — próxima</button>
+                            <button type="button" className="wa-sequence-primary" onClick={markCurrentAsSent}>{currentStep + 1 < activeSequence.messages.length ? 'Já enviei — abrir próxima no WhatsApp' : 'Já enviei — concluir sequência'}</button>
                           </div>
                         )}
                       </article>
@@ -307,7 +326,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
                   {currentStep < activeSequence.messages.length
                     ? <button type="button" className="wa-sequence-open" onClick={openCurrentMessageInWhatsApp}>Abrir WhatsApp com a mensagem atual</button>
                     : <button type="button" className="wa-sequence-secondary" onClick={resetProgress}>Reiniciar sequência para este lead</button>}
-                  <p>O Escarlate não envia mensagens. Copie, confira a conversa e toque em Enviar no WhatsApp. Avance somente depois do envio.</p>
+                  <p>Depois de enviar uma mensagem, clique em “Já enviei — abrir próxima no WhatsApp”. A próxima conversa será aberta com o texto preenchido; confira e toque em Enviar. O Escarlate nunca dispara mensagens sozinho.</p>
                 </footer>
               </>
             )}
