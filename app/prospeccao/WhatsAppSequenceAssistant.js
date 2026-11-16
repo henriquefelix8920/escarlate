@@ -129,7 +129,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
     }
 
     const sequence = latestSequences.find((item) => item.id === selectedSequenceId) || latestSequences[0] || DEFAULT_SEQUENCE;
-    const key = \`\${lead.id}:\${sequence.id}\`;
+    const key = String(lead.id) + ':' + sequence.id;
     const savedStep = Math.min(Math.max(0, Number(latestProgress[key] || 0)), sequence.messages.length);
     const step = savedStep >= sequence.messages.length ? 0 : savedStep;
     if (step !== savedStep) latestProgress = { ...latestProgress, [key]: 0 };
