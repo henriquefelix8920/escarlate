@@ -182,7 +182,20 @@ export default function ProspeccaoPage() {
     } catch (err) { setError(err.message); }
   }
 
-  const registerLeadContact = useCallback(async (leadId, channel = 'whatsapp') => {
+  const registerLeadContact = useCallback(async (leadId, channel = 'whatsapp', nextStatus = null) => {
+    if (nextStatus) {
+      const stageResponse = await fetch('/api/leads/' + encodeURIComponent(leadId), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const stageData = await readJson(stageResponse);
+      if (!stageResponse.ok) {
+        throw new Error(stageData.error || 'Não foi possível atualizar a etapa comercial do lead.');
+      }
+      setLeads((old) => old.map((lead) => lead.id === leadId ? stageData.lead : lead));
+    }
+
     const response = await fetch('/api/contacts/today', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
