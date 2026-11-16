@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import './prospeccao.css';
 import WhatsAppSequenceAssistant from './WhatsAppSequenceAssistant';
+import { getMillisecondsUntilNextSaoPauloMidnight } from '@/lib/sao-paulo-date';
 
 const stages = [
   ['new', 'Novo'], ['contacted', 'Contatado'], ['interested', 'Interessado'],
@@ -55,6 +56,7 @@ export default function ProspeccaoPage() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [saving, setSaving] = useState({});
+  const [contactedToday, setContactedToday] = useState(0);
   const lastLoadedFoundCount = useRef(0);
   const lastObservedJobId = useRef("");
 
@@ -69,6 +71,44 @@ export default function ProspeccaoPage() {
   }, []);
 
   useEffect(() => { loadLeads(); }, [loadLeads]);
+
+  const loadContactedToday = useCallback(async () => {
+    const response = await fetch('/api/contacts/today', { cache: 'no-store' });
+    const data = await readJson(response);
+    if (!response.ok) throw new Error(data.error || 'Falha ao consultar contatos de hoje.');
+    setContactedToday(Number(data.count || 0));
+    return data;
+  }, []);
+
+  useEffect(() => {
+    let timer = null;
+    let disposed = false;
+
+    const scheduleMidnightRefresh = () => {
+      timer = window.setTimeout(async () => {
+        if (disposed) return;
+        try { await loadContactedToday(); }
+        catch (err) { setError(err.message); }
+        if (!disposed) scheduleMidnightRefresh();
+      }, getMillisecondsUntilNextSaoPauloMidnight());
+    };
+
+    loadContactedToday().catch((err) => setError(err.message));
+    scheduleMidnightRefresh();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadContactedToday().catch((err) => setError(err.message));
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      disposed = true;
+      if (timer) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [loadContactedToday]);
 
   const lastLoadedTerminalJob = useRef("");
 
@@ -142,6 +182,18 @@ export default function ProspeccaoPage() {
     } catch (err) { setError(err.message); }
   }
 
+  const registerLeadContact = useCallback(async (leadId, channel = 'whatsapp') => {
+    const response = await fetch('/api/contacts/today', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead_id: leadId, channel }),
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o contato.');
+    setContactedToday(Number(data.count || 0));
+    return data;
+  }, []);
+
   async function updateLead(id, values) {
     setSaving((old) => ({ ...old, [id]: true }));
     try {
@@ -151,6 +203,13 @@ export default function ProspeccaoPage() {
       const data = await readJson(response);
       if (!response.ok) throw new Error(data.error || 'Falha ao atualizar lead.');
       setLeads((old) => old.map((lead) => lead.id === id ? data.lead : lead));
+      if (['contacted', 'interested', 'proposal', 'won'].includes(values.status)) {
+        try {
+          await registerLeadContact(id, 'manual');
+        } catch (contactError) {
+          setError(`Etapa salva, mas não consegui registrar o contato de hoje: ${contactError.message}`);
+        }
+      }
     } catch (err) { setError(err.message); }
     finally { setSaving((old) => ({ ...old, [id]: false })); }
   }
@@ -219,6 +278,7 @@ export default function ProspeccaoPage() {
         <section id="dashboard" className="finance-section">
           <div className="section-title"><div><span className="eyebrow">RESUMO FINANCEIRO</span><h2>Como estão seus resultados</h2></div><span className="live-label"><i /> Dados do CRM</span></div>
           <div className="finance-grid">
+            <article className="finance-card daily-contact-card"><span>Leads contatados hoje</span><strong>{contactedToday}</strong><small>Leads únicos · zera à meia-noite (Brasília)</small><div className="finance-symbol">◷</div></article>
             <article className="finance-card revenue-card"><span>Faturamento fechado</span><strong>{money(stats.revenue)}</strong><small>{stats.won} negócio(s) marcado(s) como fechado(s)</small><div className="finance-symbol">↗</div></article>
             <article className="finance-card"><span>Em negociação</span><strong>{money(stats.pipeline)}</strong><small>Valor informado em interessados e propostas</small><div className="finance-symbol">◎</div></article>
             <article className="finance-card"><span>Propostas enviadas</span><strong>{stats.proposals}</strong><small>Oportunidades aguardando retorno</small><div className="finance-symbol">▤</div></article>
@@ -268,7 +328,7 @@ export default function ProspeccaoPage() {
                 const wa = whatsapp(lead.phone);
                 const social = socialProfile(lead);
                 return <article className="prospect-lead" key={lead.id}>
-                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa ? <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} /> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa ? <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onContactConfirmed={registerLeadContact} /> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
                   <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
                 </article>;
               })
