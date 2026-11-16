@@ -9,7 +9,7 @@ const DEFAULT_SEQUENCE = {
   id: 'nutricionistas-primeira-abordagem',
   name: 'Nutricionistas — primeira abordagem',
   messages: [
-    'Boa tarde, {tratamento} {nome}!\nEspero que esteja tudo bem com você 🙏',
+    '{saudacao}, {tratamento} {nome}!\nEspero que esteja tudo bem com você 🙏',
     'Meu nome é Henrique, sou desenvolvedor web e trabalho com criação de sites profissionais para empresas e profissionais que desejam fortalecer sua presença digital.',
     'Estava pesquisando profissionais da sua região no Google e encontrei seu perfil.\nPercebi que você ainda não possui um site próprio.\nHoje, muitas pessoas pesquisam no Google antes de escolher um profissional.',
     'Ter um site pode ajudar a apresentar seus serviços, transmitir mais confiança e facilitar o contato de novos pacientes.\nEu tenho um site de demonstração para nutricionistas.\nPosso te mostrar?',
@@ -31,6 +31,63 @@ function withMessage(url, message) {
   return `${url}${url.includes('?') ? '&' : '?'}text=${encodeURIComponent(message)}`;
 }
 
+
+function getGreeting() {
+  const hourPart = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date()).find((part) => part.type === 'hour');
+  const hour = Number(hourPart?.value ?? 12);
+  if (hour < 12) return 'Bom dia';
+  if (hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+function normalizeName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .trim();
+}
+
+const FEMALE_FIRST_NAMES = new Set(
+  'aline amanda ana andressa beatriz bia bianca bruna camila carolina clara cristina daniela debora eduarda elaine fabiana fernanda flavia gabriela helena heloisa isabela isabella julia juliana laura larissa leticia luana mariana marcia maria monica monique natalia nicole paula patricia priscila rafaela raquel renata sabrina sandra sofia sophia tais valentina vanessa yasmin yasmim'.split(' ')
+);
+const MALE_FIRST_NAMES = new Set(
+  'adriano alan allan alexandre anderson andre antonio arthur augusto bruno caio carlos cesar daniel davi diego diogo eduardo enzo fabio felipe fernando gabriel gustavo heitor henrique joao jorge jose julio leandro leonardo lucas luiz marcelo marco marcos mateus matheus miguel murilo nicolas paulo pedro rafael raul renato ricardo roberto rodrigo samuel sergio thiago tiago vinicius vitor victor wesley william'.split(' ')
+);
+const AMBIGUOUS_FIRST_NAMES = new Set('alex andrea ariel cris dani duda elia luca noa nicola sasha'.split(' '));
+
+function inferTreatment(value) {
+  const original = String(value || '').trim();
+  const title = original.match(/^(dra?\.?|doutora?|sra?\.?)\s+/i);
+  if (title) {
+    return /^(dra|doutora|sra)/i.test(title[1]) ? 'Dra.' : 'Dr.';
+  }
+
+  const firstName = normalizeName(original).split(/\s+/)[0] || '';
+  if (FEMALE_FIRST_NAMES.has(firstName)) return 'Dra.';
+  if (MALE_FIRST_NAMES.has(firstName)) return 'Dr.';
+  if (AMBIGUOUS_FIRST_NAMES.has(firstName)) return '';
+  if (firstName.endsWith('a')) return 'Dra.';
+  if (firstName.endsWith('o')) return 'Dr.';
+  return '';
+}
+
+function stripHonorific(value) {
+  return String(value || '').replace(/^\s*(?:dra?\.?|doutora?|sra?\.?)\s+/i, '').trim();
+}
+
+function migrateDefaultSequence(sequence) {
+  if (sequence.id !== DEFAULT_SEQUENCE.id || !sequence.messages?.length) return sequence;
+  const messages = [...sequence.messages];
+  messages[0] = String(messages[0] || '').replace(/^Boa tarde(?=,?\s)/i, '{saudacao}');
+  return { ...sequence, messages };
+}
+
 export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
   const [sequences, setSequences] = useState([DEFAULT_SEQUENCE]);
   const [progress, setProgress] = useState({});
@@ -38,8 +95,8 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
   const [isOpen, setIsOpen] = useState(false);
   const [screen, setScreen] = useState('flow');
   const [selectedSequenceId, setSelectedSequenceId] = useState(DEFAULT_SEQUENCE.id);
-  const [contactName, setContactName] = useState(lead.name || '');
-  const [contactTreatment, setContactTreatment] = useState('');
+  const [contactName, setContactName] = useState(stripHonorific(lead.name || ''));
+  const [contactTreatment, setContactTreatment] = useState(inferTreatment(lead.name || ''));
   const [draft, setDraft] = useState(null);
   const [feedback, setFeedback] = useState('');
 
@@ -49,7 +106,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
       if (savedSequences) {
         const parsed = JSON.parse(savedSequences);
         const valid = Array.isArray(parsed)
-          ? parsed.filter((item) => item && item.id && item.name && Array.isArray(item.messages) && item.messages.length)
+          ? parsed.filter((item) => item && item.id && item.name && Array.isArray(item.messages) && item.messages.length).map(migrateDefaultSequence)
           : [];
         if (valid.length) setSequences(valid);
       }
@@ -100,6 +157,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
     nome: contactName,
     primeiro_nome: contactName.trim().split(/\s+/)[0] || '',
     tratamento: contactTreatment,
+    saudacao: getGreeting(),
     cidade: lead.city || lead.address || '',
     categoria: lead.category || '',
   };
@@ -115,7 +173,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
       if (savedSequences) {
         const parsed = JSON.parse(savedSequences);
         const valid = Array.isArray(parsed)
-          ? parsed.filter((item) => item && item.id && item.name && Array.isArray(item.messages) && item.messages.length)
+          ? parsed.filter((item) => item && item.id && item.name && Array.isArray(item.messages) && item.messages.length).map(migrateDefaultSequence)
           : [];
         if (valid.length) latestSequences = valid;
       }
@@ -134,11 +192,13 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
     const step = savedStep >= sequence.messages.length ? 0 : savedStep;
     if (step !== savedStep) latestProgress = { ...latestProgress, [key]: 0 };
 
-    const defaultTreatment = /nutri/i.test(String(lead.category || '')) ? 'Dra.' : '';
+    const defaultName = stripHonorific(lead.name || '');
+    const defaultTreatment = inferTreatment(lead.name || '');
     const defaultText = renderMessage(sequence.messages[step] || sequence.messages[0], {
-      nome: lead.name || '',
-      primeiro_nome: String(lead.name || '').trim().split(/\s+/)[0] || '',
+      nome: defaultName,
+      primeiro_nome: defaultName.split(/\s+/)[0] || '',
       tratamento: defaultTreatment,
+      saudacao: getGreeting(),
       cidade: lead.city || lead.address || '',
       categoria: lead.category || '',
     });
@@ -146,7 +206,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
     setSequences(latestSequences);
     setProgress(latestProgress);
     setSelectedSequenceId(sequence.id);
-    setContactName(lead.name || '');
+    setContactName(defaultName);
     setContactTreatment(defaultTreatment);
     setFeedback('');
     setScreen('flow');
@@ -157,14 +217,16 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
   }
 
   function openCurrentMessageInWhatsApp() {
-    if (!whatsappUrl || !currentMessage) return;
-    window.open(withMessage(whatsappUrl, currentMessage), '_blank', 'noopener,noreferrer');
+    const message = renderMessage(activeSequence.messages[currentStep], { ...values, saudacao: getGreeting() });
+    if (!whatsappUrl || !message) return;
+    window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
   }
 
   async function copyCurrentMessage() {
-    if (!currentMessage) return;
+    const message = renderMessage(activeSequence.messages[currentStep], { ...values, saudacao: getGreeting() });
+    if (!message) return;
     try {
-      await navigator.clipboard.writeText(currentMessage);
+      await navigator.clipboard.writeText(message);
       setFeedback('Mensagem copiada. Cole na conversa e envie pelo WhatsApp.');
     } catch {
       setFeedback('Não foi possível copiar automaticamente. Selecione o texto da mensagem e copie manualmente.');
@@ -188,7 +250,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
       return;
     }
 
-    const nextMessage = renderedMessages[nextStep];
+    const nextMessage = renderMessage(activeSequence.messages[nextStep], { ...values, saudacao: getGreeting() });
     if (whatsappUrl && nextMessage) {
       window.open(withMessage(whatsappUrl, nextMessage), '_blank', 'noopener,noreferrer');
       setFeedback(`Mensagem ${nextStep + 1} de ${activeSequence.messages.length} aberta no WhatsApp. Confira o texto e toque em Enviar.`);
@@ -287,9 +349,9 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
                     <input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="Nome do contato" />
                   </label>
                   <label>Tratamento (opcional)
-                    <input value={contactTreatment} onChange={(event) => setContactTreatment(event.target.value)} placeholder="Ex.: Dra., Dr., Sr." />
+                    <input value={contactTreatment} onChange={(event) => setContactTreatment(event.target.value)} placeholder="Detectado pelo nome; ajuste se necessário" />
                   </label>
-                  <p>Campos disponíveis nos textos: <code>{'{nome}'}</code>, <code>{'{primeiro_nome}'}</code>, <code>{'{tratamento}'}</code>, <code>{'{cidade}'}</code> e <code>{'{categoria}'}</code>.</p>
+                  <p>Campos disponíveis nos textos: <code>{'{nome}'}</code>, <code>{'{primeiro_nome}'}</code>, <code>{'{tratamento}'}</code>, <code>{'{cidade}'}</code>, <code>{'{categoria}'}</code> e <code>{'{saudacao}'}</code>.</p>
                 </div>
 
                 <div className="wa-sequence-progress">
