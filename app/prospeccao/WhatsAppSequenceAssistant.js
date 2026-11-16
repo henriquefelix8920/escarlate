@@ -150,7 +150,7 @@ function migrateDefaultSequence(sequence) {
   return { ...sequence, messages };
 }
 
-export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
+export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContactConfirmed }) {
   const [sequences, setSequences] = useState([DEFAULT_SEQUENCE]);
   const [progress, setProgress] = useState({});
   const [storageReady, setStorageReady] = useState(false);
@@ -319,8 +319,15 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
     }
   }
 
-  function markCurrentAsSent() {
+  async function markCurrentAsSent() {
     if (currentStep >= activeSequence.messages.length) return;
+
+    try {
+      if (onContactConfirmed) await onContactConfirmed(lead.id, 'whatsapp');
+    } catch (error) {
+      setFeedback(`Não consegui registrar este contato no contador de hoje: ${error.message} Tente confirmar novamente.`);
+      return;
+    }
 
     const nextStep = currentStep + 1;
     const updatedProgress = { ...progress, [progressKey]: nextStep };
