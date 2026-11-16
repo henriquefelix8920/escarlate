@@ -112,3 +112,12 @@
   .wa-sequence-library-item{align-items:flex-start;flex-direction:column}
   .wa-sequence-editor-actions>*{flex:1}
 }
+
+
+/* Botão destacado para o assistente de mensagens */
+.whatsapp-action.whatsapp-assistant-action{gap:10px;min-width:188px;padding:8px 13px;background:linear-gradient(135deg,rgba(37,211,102,.19),rgba(24,139,81,.11));border:1px solid rgba(73,220,132,.58);box-shadow:0 0 0 1px rgba(37,211,102,.06),0 7px 20px rgba(16,120,69,.1)}
+.whatsapp-assistant-action:hover{background:linear-gradient(135deg,rgba(37,211,102,.27),rgba(24,139,81,.17));border-color:rgba(91,235,149,.8)}
+.whatsapp-assistant-icon{display:grid;place-items:center;width:29px;height:29px;flex:0 0 29px;border-radius:9px;background:rgba(37,211,102,.2);font-size:1rem}
+.whatsapp-assistant-copy{display:grid;gap:2px;text-align:left}
+.whatsapp-assistant-copy strong{font-size:.75rem;line-height:1.15}
+.whatsapp-assistant-copy small{font-size:.62rem;font-weight:600;color:#8fe7ae;letter-spacing:.01em}
