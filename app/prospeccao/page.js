@@ -7,7 +7,7 @@ import WhatsAppSequenceAssistant from './WhatsAppSequenceAssistant';
 import { getMillisecondsUntilNextSaoPauloMidnight } from '@/lib/sao-paulo-date';
 
 const stages = [
-  ['new', 'Novo'], ['contacted', 'Contatado'], ['interested', 'Interessado'],
+  ['new', 'Novo'], ['contacted', 'Contatado'], ['follow_up', 'Follow-up'], ['interested', 'Interessado'],
   ['proposal', 'Proposta'], ['won', 'Fechado'], ['lost', 'Perdido'],
 ];
 const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -71,6 +71,18 @@ export default function ProspeccaoPage() {
   }, []);
 
   useEffect(() => { loadLeads(); }, [loadLeads]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') loadLeads();
+    };
+    const timer = window.setInterval(refreshWhenVisible, 60000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [loadLeads]);
 
   const loadContactedToday = useCallback(async () => {
     const response = await fetch('/api/contacts/today', { cache: 'no-store' });
@@ -246,7 +258,7 @@ export default function ProspeccaoPage() {
   const noSite = useMemo(() => leads.filter((lead) => !String(lead.website || '').trim()), [leads]);
   const stats = useMemo(() => ({
     noSite: noSite.length,
-    contacted: noSite.filter((lead) => ['contacted','interested','proposal','won'].includes(lead.status)).length,
+    contacted: noSite.filter((lead) => ['contacted','follow_up','interested','proposal','won'].includes(lead.status)).length,
     proposals: noSite.filter((lead) => lead.status === 'proposal').length,
     won: leads.filter((lead) => lead.status === 'won').length,
     revenue: leads.filter((lead) => lead.status === 'won').reduce((sum, lead) => sum + Number(lead.deal_value || 0), 0),
@@ -333,7 +345,7 @@ export default function ProspeccaoPage() {
         <section id="leads" className="leads-section">
           <div className="leads-heading"><div><span className="eyebrow">SEU FUNIL COMERCIAL</span><h2>Leads sem site</h2><p>Empresas que podem precisar de um site profissional.</p></div><span className="lead-total">{visible.length} exibidos</span></div>
           <div className="lead-toolbar"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="⌕  Buscar por empresa, telefone ou cidade..." /><div className="lead-filters">
-            {[['all','Todos'],['pending','Novos'],['contacted','Contatados'],['interested','Interessados'],['proposal','Propostas'],['won','Fechados'],['lost','Perdidos']].map(([value,label]) => <button key={value} className={filter === value ? 'filter-active' : ''} onClick={() => setFilter(value)}>{label}</button>)}
+            {[['all','Todos'],['pending','Novos'],['contacted','Contatados'],['follow_up','Follow-up'],['interested','Interessados'],['proposal','Propostas'],['won','Fechados'],['lost','Perdidos']].map(([value,label]) => <button key={value} className={filter === value ? 'filter-active' : ''} onClick={() => setFilter(value)}>{label}</button>)}
           </div></div>
           <div className="lead-list">
             {visible.length === 0 ? <div className="empty-crm">{noSite.length ? 'Nenhum lead corresponde a esse filtro.' : 'Ainda não há leads sem site. Faça uma pesquisa acima para encontrar oportunidades.'}</div> :
