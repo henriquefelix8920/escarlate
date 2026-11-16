@@ -54,35 +54,98 @@ function normalizeName(value) {
 }
 
 const FEMALE_FIRST_NAMES = new Set(
-  'adriana aline alessandra amanda ana andressa andrea beatriz bia bianca bruna camila carla carolina celia cecilia clara cintia cristina daniela debora eduarda elaine eliana ester esther fabiana fernanda flavia helena heloisa isabel isabela isabella iris jessica joice julia juliana lais laura larissa leticia livia luana luiza luzia maira manuela marcela marcia maria mariana marisa michele monica monique natalia nathalia nicole noemi pamela paula patricia priscila rebeca rebecca rafaela raquel renata rosa sabrina sandra sara sarah silvia simone sonia sofia sophia sueli tais tania teresa valeria valentina vanessa vera viviane yasmin yasmim'.split(' ')
+  'adriana agatha alana alessandra alessia alicia aline amanda ana andressa andrea angelica antonella ariane barbara beatriz bia bianca bruna camila carla carolina carol caroline candyce catarina celia cecilia clara cintia cristina daniela dayane debora eduarda elaine eliana ellen erika ester esther fabiana fernanda flavia giovana giulia helena heloisa isabel isabela isabella iris itala jackeline jessica joceli joice julia juliana karla lais laura larissa leticia livia luana luara luciana luisa luiza luanna luzia maira malu manuela marcela marcia maria mariana marisa michele monica monique natalia nathalia nicole nicoli noemi pamela paula patricia priscila rebeca rebecca rafaela raquel rayane renata rosa rubia sabrina sandra sara sarah silvia simone sonia sofia sophia sueli tais tania taynara teresa thays valeria valentina vanessa vera viviane yasmin yasmim'.split(' ')
 );
 const MALE_FIRST_NAMES = new Set(
-  'abel adriano afonso alan alberto alessandro allan alvaro alexandre almir anderson andre antonio arthur augusto bernardo breno bruno caio carlos cassio caua cesar cicero claudio cleber daniel danilo davi denis diego diogo eduardo elias emanuel emerson enzo erick estevao fabio fabricio felipe fernando francisco gabriel geraldo gilberto gustavo heitor henrique hugo igor italo ivan joao joaquim jorge jose julio kevin leandro leonardo lucas luan luciano luiz marcelo marco marcos mario mateus matheus mauro mauricio miguel moises murilo natan nathan nelson nicolas otavio pablo paulo patrick pedro rafael raul renato ricardo roberto rodrigo romulo ronaldo samuel sandro saulo sergio sidney thiago tiago tomas valdir vinicius vitor victor wagner wesley william yuri'.split(' ')
+  'abel adriano afonso alan alberto alessandro allan alvaro alexandre almir anderson andre antonio arthur augusto bernardo breno bruno caio carlos cassio caua cesar cicero claudio cleber daniel danilo davi denis diego diogo eduardo elias emanuel emerson enzo erick estevao fabio fabricio felipe fernando francisco gabriel geraldo gilberto gustavo heitor henrique hugo igor italo ivan jean joao joaquim jorge jose julio kevin leandro leonardo lucas luan luciano luiz marcelo marco marcos mario mateus matheus mauro mauricio miguel moises murilo natan nathan nelson nicolas otavio pablo paulo patrick pedro rafael raul renato ricardo roberto rhuan rodrigo romulo ronaldo samuel sandro saulo sergio sidney thiago tiago tomas valdir vinicius vitor victor wagner wellington wesley william yuri'.split(' ')
 );
 const AMBIGUOUS_FIRST_NAMES = new Set('alex andrea ariel cris dani duda elia luca noa nicola sasha'.split(' '));
+const NON_NAME_WORDS = new Set(
+  'nutricionista nutricionistas nutri nutricao clinica consultorio espaco cozinha terapeutica atendimento profissional profissionais especialista esportivo esportiva materno infantil emagrecimento saudavel de da do dos das e'.split(' ')
+);
+const LOCATION_PREPOSITIONS = new Set('em no na nos nas'.split(' '));
+const HONORIFIC_PATTERN = /(?:^|[\s|,;:–—-])(dra?\.?|doutora?|doutor|sra?\.?|senhora|sr\.?|senhor)\s*/i;
 
 function inferTreatment(value) {
   const original = String(value || '').trim();
-  const title = original.match(/^(dra?\.?|doutora?|sra?\.?)\s+/i);
+  const title = original.match(HONORIFIC_PATTERN);
   if (title) {
-    return /^(dra|doutora|sra)/i.test(title[1]) ? 'Dra.' : 'Dr.';
+    const normalizedTitle = title[1].replace(/\./g, '').toLowerCase();
+    return ['dra', 'doutora', 'sra', 'senhora'].includes(normalizedTitle) ? 'Dra.' : 'Dr.';
   }
 
-  const firstName = normalizeName(original).split(/\s+/)[0] || '';
-  if (FEMALE_FIRST_NAMES.has(firstName)) return 'Dra.';
-  if (MALE_FIRST_NAMES.has(firstName)) return 'Dr.';
-  if (AMBIGUOUS_FIRST_NAMES.has(firstName)) return '';
+  // O Google Maps frequentemente coloca "Nutricionista" ou "Consultório de Nutrição"
+  // antes do nome. Procura nomes reconhecidos em cada trecho, sem ler "em Recife"
+  // ou "em São Paulo" como se fossem o nome da pessoa.
+  const segments = original.split(/[|,;:–—-]+|\s+I\s+/i);
+  for (const segment of segments) {
+    const tokens = normalizeName(segment).split(/\s+/).filter(Boolean);
+    for (const token of tokens) {
+      if (LOCATION_PREPOSITIONS.has(token)) break;
+      if (NON_NAME_WORDS.has(token)) continue;
+      if (AMBIGUOUS_FIRST_NAMES.has(token)) return '';
+      if (FEMALE_FIRST_NAMES.has(token)) return 'Dra.';
+      if (MALE_FIRST_NAMES.has(token)) return 'Dr.';
+    }
+  }
   return '';
 }
 
-function stripHonorific(value) {
-  return String(value || '').replace(/^\s*(?:dra?\.?|doutora?|sra?\.?)\s+/i, '').trim();
+function stripHonorific(value, stripDescriptors = false) {
+  let result = String(value || '').replace(
+    /(^|[\s|,;:–—-])(?:dra?\.?|doutora?|doutor|sra?\.?|senhora|sr\.?|senhor)\s*/gi,
+    '$1',
+  ).trim();
+
+  if (stripDescriptors) {
+    const leadingDescriptors = new Set([...NON_NAME_WORDS, 'em', 'no', 'na', 'nos', 'nas']);
+    const words = result.split(/\s+/);
+    while (words.length) {
+      const token = normalizeName(words[0]);
+      if (!token || /^[|,;:–—-]+$/.test(words[0])) {
+        words.shift();
+        continue;
+      }
+      if (!leadingDescriptors.has(token)) break;
+      words.shift();
+    }
+    result = words.join(' ').replace(/^[|,;:–—-]+\s*/, '').trim();
+  }
+
+  return result.replace(/\s{2,}/g, ' ').trim();
+}
+
+function resolveContact(value) {
+  const treatment = inferTreatment(value);
+  const segments = String(value || '').split(/[|,;:–—-]+|\s+I\s+/i);
+  const personSegment = treatment
+    ? segments.find((segment) => inferTreatment(segment) === treatment)
+    : null;
+  const nameSource = personSegment || value;
+  return {
+    treatment,
+    name: stripHonorific(nameSource, Boolean(treatment)),
+  };
 }
 
 function migrateDefaultSequence(sequence) {
   if (sequence.id !== DEFAULT_SEQUENCE.id || !sequence.messages?.length) return sequence;
   const messages = [...sequence.messages];
-  messages[0] = String(messages[0] || '').replace(/^Boa tarde(?=,?\s)/i, '{saudacao}');
+  let firstMessage = String(messages[0] || '')
+    .replace(/^(?:Bom dia|Boa tarde|Boa noite)(?=,?\s)/i, '{saudacao}');
+
+  // Migra o roteiro padrão antigo salvo no navegador, que podia não ter
+  // o marcador {tratamento} mesmo depois da atualização do código.
+  if (!/\{tratamento\}/i.test(firstMessage) && /\{nome\}/i.test(firstMessage)) {
+    firstMessage = firstMessage.replace(
+      /^(\s*)(?:dra?\.?|doutora?|doutor|sra?\.?|senhora|sr\.?|senhor)\s*(?=\{nome\})/i,
+      '$1{tratamento} ',
+    );
+    if (!/\{tratamento\}/i.test(firstMessage)) {
+      firstMessage = firstMessage.replace(/\{nome\}/i, '{tratamento} {nome}');
+    }
+  }
+  messages[0] = firstMessage.replace(/\{tratamento\}(?:\s+\{tratamento\})+/gi, '{tratamento}');
   return { ...sequence, messages };
 }
 
@@ -92,9 +155,10 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
   const [storageReady, setStorageReady] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [screen, setScreen] = useState('flow');
+  const initialContact = resolveContact(lead.name || '');
   const [selectedSequenceId, setSelectedSequenceId] = useState(DEFAULT_SEQUENCE.id);
-  const [contactName, setContactName] = useState(stripHonorific(lead.name || ''));
-  const [contactTreatment, setContactTreatment] = useState(inferTreatment(lead.name || ''));
+  const [contactName, setContactName] = useState(initialContact.name);
+  const [contactTreatment, setContactTreatment] = useState(initialContact.treatment);
   const [draft, setDraft] = useState(null);
   const [feedback, setFeedback] = useState('');
 
@@ -190,8 +254,9 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
     const step = savedStep >= sequence.messages.length ? 0 : savedStep;
     if (step !== savedStep) latestProgress = { ...latestProgress, [key]: 0 };
 
-    const defaultName = stripHonorific(lead.name || '');
-    const defaultTreatment = inferTreatment(lead.name || '');
+    const defaultContact = resolveContact(lead.name || '');
+    const defaultName = defaultContact.name;
+    const defaultTreatment = defaultContact.treatment;
     const defaultText = renderMessage(sequence.messages[step] || sequence.messages[0], {
       nome: defaultName,
       primeiro_nome: defaultName.split(/\s+/)[0] || '',
