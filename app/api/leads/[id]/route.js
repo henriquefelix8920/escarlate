@@ -8,7 +8,7 @@ export async function PATCH(request, { params }) {
     const allowed = ['status', 'notes', 'name', 'phone', 'email', 'website', 'instagram', 'deal_value'];
     const update = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
     if (!Object.keys(update).length) return NextResponse.json({ error: 'Nenhum campo válido para atualizar.' }, { status: 400 });
-    if (update.status && !['new','contacted','interested','proposal','won','lost'].includes(update.status)) return NextResponse.json({ error: 'Etapa comercial inválida.' }, { status: 400 });
+    if (update.status && !['new','contacted','follow_up','interested','proposal','won','lost'].includes(update.status)) return NextResponse.json({ error: 'Etapa comercial inválida.' }, { status: 400 });
     if (Object.prototype.hasOwnProperty.call(update, 'deal_value')) {
       const amount = Number(update.deal_value);
       if (!Number.isFinite(amount) || amount < 0 || amount > 1000000000) return NextResponse.json({ error: 'Informe um valor válido para o negócio.' }, { status: 400 });
