@@ -5,7 +5,7 @@ import re
 import secrets
 import uuid
 from datetime import datetime, timezone
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -38,6 +38,44 @@ class SearchRequest(BaseModel):
 
 def digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
+
+SOCIAL_HOSTS = {
+    "instagram.com": "instagram",
+    "facebook.com": "facebook", "fb.com": "facebook",
+    "tiktok.com": "tiktok",
+    "linkedin.com": "linkedin",
+    "youtube.com": "youtube", "youtu.be": "youtube",
+    "x.com": "x", "twitter.com": "x",
+    "threads.net": "threads",
+    "pinterest.com": "pinterest",
+    "snapchat.com": "snapchat",
+    "kwai.com": "kwai",
+    "whatsapp.com": "whatsapp", "wa.me": "whatsapp",
+    "linktr.ee": "social", "beacons.ai": "social",
+    "bio.site": "social", "solo.to": "social",
+    "msha.ke": "social", "campsite.bio": "social",
+}
+
+def classify_social_url(value: str) -> tuple[str | None, str | None]:
+    """Return (network, url) for social profiles; unknown domains are business websites."""
+    raw = (value or "").strip()
+    if not raw:
+        return None, None
+    candidate = raw if "://" in raw else "https://" + raw
+    parsed = urlparse(candidate)
+    if parsed.hostname and parsed.hostname.lower().endswith("google.com"):
+        wrapped = parse_qs(parsed.query)
+        destination = (wrapped.get("q") or wrapped.get("url") or [None])[0]
+        if destination:
+            raw = unquote(destination)
+            candidate = raw if "://" in raw else "https://" + raw
+            parsed = urlparse(candidate)
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    for domain, network in SOCIAL_HOSTS.items():
+        if host == domain or host.endswith("." + domain):
+            return network, raw
+    return None, None
+
 
 @app.get("/health")
 def health():
@@ -155,7 +193,7 @@ async def _run_search(job_id: str, data: SearchRequest):
         progress = {}
     progress = {
         "version": 1, "phase": "starting", "detail": "Preparando a pesquisa…",
-        "scanned": 0, "candidates": 0, "with_website": 0,
+        "scanned": 0, "candidates": 0, "with_website": 0, "with_social": 0,
         "duplicates": 0, "errors": 0, "saved": int(job_row.get("found_count") or 0),
         "batch": 0, "total_batches": 0, **progress,
     }
@@ -310,17 +348,23 @@ async def _run_search(job_id: str, data: SearchRequest):
                                 else:
                                     website = await element.get_attribute("href") or ""
     
-                        if website.strip():
+                        social_network, social_url = classify_social_url(website)
+                        if website.strip() and not social_network:
                             progress["with_website"] += 1
                             progress["scanned"] += 1
-                            report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site.")
+                            report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site institucional.")
                             continue
-    
+
+                        if social_network:
+                            progress["with_social"] += 1
+
                         normalized = digits(phone)
                         row = {
                             "name": name[:200], "category": data.category,
                             "phone": phone or None, "phone_normalized": normalized or None,
-                            "website": None, "address": address or None,
+                            "website": None, "instagram": social_url if social_network == "instagram" else None,
+                            "profile": social_url if social_network and social_network != "instagram" else None,
+                            "address": address or None,
                             "city": data.city, "google_maps_url": maps_url,
                             "source": "google_maps", "search_term": f"{data.category} em {data.city}",
                             "status": "new",
