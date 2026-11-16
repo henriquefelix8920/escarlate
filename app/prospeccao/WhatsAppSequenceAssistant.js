@@ -77,7 +77,7 @@ function inferTreatment(value) {
   // O Google Maps frequentemente coloca "Nutricionista" ou "Consultório de Nutrição"
   // antes do nome. Procura nomes reconhecidos em cada trecho, sem ler "em Recife"
   // ou "em São Paulo" como se fossem o nome da pessoa.
-  const segments = original.split(/[|,;:–—-]+/);
+  const segments = original.split(/[|,;:–—-]+|\\s+I\\s+/i);
   for (const segment of segments) {
     const tokens = normalizeName(segment).split(/\s+/).filter(Boolean);
     for (const token of tokens) {
@@ -117,7 +117,7 @@ function stripHonorific(value, stripDescriptors = false) {
 
 function resolveContact(value) {
   const treatment = inferTreatment(value);
-  const segments = String(value || '').split(/[|,;:–—-]+/);
+  const segments = String(value || '').split(/[|,;:–—-]+|\\s+I\\s+/i);
   const personSegment = treatment
     ? segments.find((segment) => inferTreatment(segment) === treatment)
     : null;
