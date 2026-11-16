@@ -54,10 +54,10 @@ function normalizeName(value) {
 }
 
 const FEMALE_FIRST_NAMES = new Set(
-  'aline amanda ana andressa beatriz bia bianca bruna camila carolina clara cristina daniela debora eduarda elaine fabiana fernanda flavia gabriela helena heloisa isabela isabella julia juliana laura larissa leticia luana mariana marcia maria monica monique natalia nicole paula patricia priscila rafaela raquel renata sabrina sandra sofia sophia tais valentina vanessa yasmin yasmim'.split(' ')
+  'adriana aline alessandra amanda ana andressa andrea beatriz bia bianca bruna camila carla carolina celia cecilia clara cintia cristina daniela debora eduarda elaine eliana ester esther fabiana fernanda flavia helena heloisa isabel isabela isabella iris jessica joice julia juliana lais laura larissa leticia livia luana luiza luzia maira manuela marcela marcia maria mariana marisa michele monica monique natalia nathalia nicole noemi pamela paula patricia priscila rebeca rebecca rafaela raquel renata rosa sabrina sandra sara sarah silvia simone sonia sofia sophia sueli tais tania teresa valeria valentina vanessa vera viviane yasmin yasmim'.split(' ')
 );
 const MALE_FIRST_NAMES = new Set(
-  'adriano alan allan alexandre anderson andre antonio arthur augusto bruno caio carlos cesar daniel davi diego diogo eduardo enzo fabio felipe fernando gabriel gustavo heitor henrique joao jorge jose julio leandro leonardo lucas luiz marcelo marco marcos mateus matheus miguel murilo nicolas paulo pedro rafael raul renato ricardo roberto rodrigo samuel sergio thiago tiago vinicius vitor victor wesley william'.split(' ')
+  'abel adriano afonso alan alberto alessandro allan alvaro alexandre almir anderson andre antonio arthur augusto bernardo breno bruno caio carlos cassio caua cesar cicero claudio cleber daniel danilo davi denis diego diogo eduardo elias emanuel emerson enzo erick estevao fabio fabricio felipe fernando francisco gabriel geraldo gilberto gustavo heitor henrique hugo igor italo ivan joao joaquim jorge jose julio kevin leandro leonardo lucas luan luciano luiz marcelo marco marcos mario mateus matheus mauro mauricio miguel moises murilo natan nathan nelson nicolas otavio pablo paulo patrick pedro rafael raul renato ricardo roberto rodrigo romulo ronaldo samuel sandro saulo sergio sidney thiago tiago tomas valdir vinicius vitor victor wagner wesley william yuri'.split(' ')
 );
 const AMBIGUOUS_FIRST_NAMES = new Set('alex andrea ariel cris dani duda elia luca noa nicola sasha'.split(' '));
 
@@ -72,8 +72,6 @@ function inferTreatment(value) {
   if (FEMALE_FIRST_NAMES.has(firstName)) return 'Dra.';
   if (MALE_FIRST_NAMES.has(firstName)) return 'Dr.';
   if (AMBIGUOUS_FIRST_NAMES.has(firstName)) return '';
-  if (firstName.endsWith('a')) return 'Dra.';
-  if (firstName.endsWith('o')) return 'Dr.';
   return '';
 }
 
@@ -348,7 +346,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
                   <label>Nome para a mensagem
                     <input value={contactName} onChange={(event) => setContactName(event.target.value)} placeholder="Nome do contato" />
                   </label>
-                  <label>Tratamento (opcional)
+                  <label>Tratamento (sugestão automática)
                     <input value={contactTreatment} onChange={(event) => setContactTreatment(event.target.value)} placeholder="Detectado pelo nome; ajuste se necessário" />
                   </label>
                   <p>Campos disponíveis nos textos: <code>{'{nome}'}</code>, <code>{'{primeiro_nome}'}</code>, <code>{'{tratamento}'}</code>, <code>{'{cidade}'}</code>, <code>{'{categoria}'}</code> e <code>{'{saudacao}'}</code>.</p>
