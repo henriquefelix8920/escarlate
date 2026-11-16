@@ -230,8 +230,12 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl }) {
 
   return (
     <>
-      <button type="button" className="whatsapp-action" onClick={startConversation}>
-        ◉ Abrir WhatsApp
+      <button type="button" className="whatsapp-action whatsapp-assistant-action" onClick={startConversation}>
+        <span className="whatsapp-assistant-icon" aria-hidden="true">◉</span>
+        <span className="whatsapp-assistant-copy">
+          <strong>Assistente WhatsApp</strong>
+          <small>Sequência de mensagens</small>
+        </span>
       </button>
 
       {isOpen && (
