@@ -162,6 +162,8 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
   const [contactTreatment, setContactTreatment] = useState(initialContact.treatment);
   const [draft, setDraft] = useState(null);
   const [feedback, setFeedback] = useState('');
+  const [followUpAwaitingConfirmation, setFollowUpAwaitingConfirmation] = useState(false);
+  const [followUpFeedback, setFollowUpFeedback] = useState('');
 
   useEffect(() => {
     try {
@@ -329,6 +331,43 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
     }
   }
 
+  function openFollowUpInWhatsApp() {
+    if (!whatsappUrl) {
+      setFollowUpFeedback('Este lead não possui um número de WhatsApp válido.');
+      return;
+    }
+
+    const contact = resolveContact(lead.name || '');
+    const displayName = [contact.treatment, contact.name].filter(Boolean).join(' ') || lead.name;
+    const greeting = displayName ? `Olá, ${displayName}! Tudo bem? 😊` : 'Olá! Tudo bem? 😊';
+    const message = `${greeting}
+
+Estou retomando nossa conversa porque acredito que um site profissional pode valorizar a forma como você apresenta seu trabalho, transmitir confiança logo no primeiro contato e facilitar que novos clientes encontrem seus serviços e falem diretamente com você.
+
+A ideia é criar algo com a sua identidade, reunindo suas informações, serviços e formas de contato em um só lugar — de um jeito simples e pensado para o seu negócio.
+
+Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para você? É sem compromisso e levo só um instante para te apresentar. 😊`;
+
+    const whatsappWindow = window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
+    if (!whatsappWindow) {
+      setFollowUpFeedback('O navegador bloqueou a abertura do WhatsApp. Permita pop-ups e tente novamente.');
+      return;
+    }
+
+    setFollowUpAwaitingConfirmation(true);
+    setFollowUpFeedback('Mensagem preparada no WhatsApp. Confira o texto e toque em Enviar; depois confirme aqui no CRM.');
+  }
+
+  async function confirmFollowUpSent() {
+    try {
+      if (onContactConfirmed) await onContactConfirmed(lead.id, 'whatsapp');
+      setFollowUpAwaitingConfirmation(false);
+      setFollowUpFeedback('Follow-up registrado. O contato de hoje foi contabilizado no CRM.');
+    } catch (error) {
+      setFollowUpFeedback(`Não consegui registrar o follow-up: ${error.message}. Tente novamente.`);
+    }
+  }
+
   async function copyCurrentMessage() {
     const message = renderMessage(activeSequence.messages[currentStep], { ...values, saudacao: getGreeting() });
     if (!message) return;
@@ -436,6 +475,24 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
           <small>Sequência de mensagens</small>
         </span>
       </button>
+
+      {lead.status === 'follow_up' && (
+        <div className="whatsapp-followup">
+          <button type="button" className="whatsapp-action whatsapp-followup-action" onClick={openFollowUpInWhatsApp}>
+            <span aria-hidden="true">↻</span>
+            <span className="whatsapp-assistant-copy">
+              <strong>Preparar follow-up</strong>
+              <small>Retomar conversa · 24h sem resposta</small>
+            </span>
+          </button>
+          {followUpAwaitingConfirmation && (
+            <button type="button" className="followup-confirm-action" onClick={confirmFollowUpSent}>
+              Já enviei — registrar contato
+            </button>
+          )}
+          {followUpFeedback && <small className="followup-feedback" role="status">{followUpFeedback}</small>}
+        </div>
+      )}
 
       {isOpen && (
         <div className="wa-sequence-backdrop" onMouseDown={(event) => {
