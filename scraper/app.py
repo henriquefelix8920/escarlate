@@ -88,13 +88,71 @@ def health():
 
 @app.on_event("startup")
 async def recover_interrupted_jobs():
-    # Retoma pesquisas que ficaram pendentes quando o processo do Render reiniciou.
+    # Recupera no máximo uma pesquisa válida. Pesquisas antigas deixadas como
+    # running por reinicializações/OOM não podem bloquear a prospecção para sempre.
     try:
         client = db()
-        result = client.table("search_jobs").select("*").in_("status", ["queued", "running", "retry_wait"]).execute()
+        result = client.table("search_jobs").select("*").in_(
+            "status", ["queued", "running", "retry_wait", "cancelling"]
+        ).order("created_at", desc=True).limit(100).execute()
+        now = datetime.now(timezone.utc)
+        recovered = False
+
+        def age_seconds(value):
+            if not value:
+                return None
+            try:
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return max(0, (now - parsed.astimezone(timezone.utc)).total_seconds())
+            except (TypeError, ValueError):
+                return None
+
         for row in result.data or []:
-            data = SearchRequest(city=row["city"], category=row["term"], limit=row["requested_limit"])
-            asyncio.create_task(run_search(row["id"], data))
+            job_id = row["id"]
+            status = row.get("status")
+            created_age = age_seconds(row.get("created_at"))
+            heartbeat_age = age_seconds(row.get("last_heartbeat_at"))
+
+            if status == "cancelling":
+                client.table("search_jobs").update({
+                    "status": "cancelled",
+                    "finished_at": now.isoformat(),
+                    "error": None,
+                }).eq("id", job_id).execute()
+                continue
+
+            stale = (
+                (status == "running" and (
+                    heartbeat_age is None and (created_age is None or created_age > 180)
+                    or heartbeat_age is not None and heartbeat_age > 180
+                ))
+                or (status == "queued" and created_age is not None and created_age > 600)
+                or (status == "retry_wait" and created_age is not None and created_age > 900)
+            )
+            if stale:
+                client.table("search_jobs").update({
+                    "status": "failed",
+                    "finished_at": now.isoformat(),
+                    "error": "Pesquisa encerrada após reinicialização: o processo anterior não retomou a atividade.",
+                }).eq("id", job_id).execute()
+                continue
+
+            if not recovered:
+                data = SearchRequest(
+                    city=row["city"], category=row["term"], limit=row["requested_limit"]
+                )
+                asyncio.create_task(run_search(job_id, data))
+                recovered = True
+            else:
+                # O Escarlate executa uma busca global por vez. Evita enfileirar
+                # várias pesquisas antigas que ficariam parecendo uma busca atual.
+                client.table("search_jobs").update({
+                    "status": "failed",
+                    "finished_at": now.isoformat(),
+                    "error": "Pesquisa encerrada porque havia outra pesquisa mais recente em recuperação.",
+                }).eq("id", job_id).execute()
     except Exception as exc:
         print(f"Falha ao recuperar pesquisas pendentes: {type(exc).__name__}: {str(exc)[:300]}", flush=True)
 
@@ -106,7 +164,7 @@ async def start_search(data: SearchRequest, background: BackgroundTasks):
         client = db()
         active = client.table("search_jobs").select("*").in_(
             "status", ["queued", "running", "retry_wait", "cancelling"]
-        ).order("created_at", desc=False).limit(1).execute()
+        ).order("created_at", desc=True).limit(1).execute()
         if active.data:
             # Pesquisas são globais: um segundo aparelho acompanha a ativa em vez de iniciar outra.
             return active.data[0]
@@ -126,8 +184,25 @@ def cancel_job(job_id: str):
         current = result.data[0]
         if current.get("status") in {"completed", "failed", "cancelled"}:
             return current
-        client.table("search_jobs").update({"status": "cancelling"}).eq("id", job_id).execute()
-        return {**current, "status": "cancelling", "message": "Interrupção solicitada. A captura será encerrada com segurança."}
+        # Sem tarefa ativa neste processo, não existe worker que possa confirmar
+        # o cancelamento. Finaliza o job órfão imediatamente para não travar o CRM.
+        active_in_process = job_id in ACTIVE_JOBS
+        next_status = "cancelling" if active_in_process else "cancelled"
+        finished_at = None if active_in_process else datetime.now(timezone.utc).isoformat()
+        client.table("search_jobs").update({
+            "status": next_status,
+            "finished_at": finished_at,
+        }).eq("id", job_id).execute()
+        return {
+            **current,
+            "status": next_status,
+            "finished_at": finished_at,
+            "message": (
+                "Interrupção solicitada. A captura será encerrada com segurança."
+                if active_in_process else
+                "Pesquisa interrompida. Não havia um processo ativo para continuar esta tarefa."
+            ),
+        }
     except HTTPException:
         raise
     except Exception as exc:
@@ -139,7 +214,7 @@ def get_active_job():
         client = db()
         active = client.table("search_jobs").select("*").in_(
             "status", ["queued", "running", "retry_wait", "cancelling"]
-        ).order("created_at", desc=False).limit(1).execute()
+        ).order("created_at", desc=True).limit(1).execute()
         if active.data:
             return active.data[0]
         latest = client.table("search_jobs").select("*").order(
@@ -228,7 +303,13 @@ async def _run_search(job_id: str, data: SearchRequest):
 
     try:
         check_cancelled()
-        update_job(status="running", last_heartbeat_at=datetime.now(timezone.utc).isoformat())
+        # Não sobrescreve um cancelamento que chegou entre a primeira checagem
+        # e esta atualização de status.
+        client.table("search_jobs").update({
+            "status": "running",
+            "last_heartbeat_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", job_id).in_("status", ["queued", "running", "retry_wait"]).execute()
+        check_cancelled()
         report_progress(phase="opening_maps" if not candidates else "resuming",
                         detail="Abrindo o Google Maps…" if not candidates else f"Retomando do registro {next_candidate_index + 1}…")
         async with async_playwright() as p:
