@@ -31,7 +31,7 @@ def require_token(authorization: str | None = Header(default=None)):
 class SearchRequest(BaseModel):
     city: str = Field(min_length=2, max_length=100)
     category: str = Field(min_length=2, max_length=100)
-    limit: int = Field(default=10, ge=1, le=15)
+    limit: int = Field(default=10, ge=1, le=50)
     channel: Literal['whatsapp', 'instagram'] = 'whatsapp'
 
 def is_instagram_url(value: str) -> bool:
