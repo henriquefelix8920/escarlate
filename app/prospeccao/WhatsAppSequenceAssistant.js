@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { WHATSAPP_MESSAGE_BUTTONS, WHATSAPP_MESSAGE_CATEGORIES } from './whatsapp-message-buttons';
 
 const SEQUENCES_KEY = 'escarlate:whatsapp-sequences:v1';
 const PROGRESS_KEY = 'escarlate:whatsapp-sequence-progress:v1';
@@ -164,6 +165,8 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
   const [feedback, setFeedback] = useState('');
   const [followUpAwaitingConfirmation, setFollowUpAwaitingConfirmation] = useState(false);
   const [followUpFeedback, setFollowUpFeedback] = useState('');
+  const [selectedButtonCategory, setSelectedButtonCategory] = useState(WHATSAPP_MESSAGE_CATEGORIES[0]);
+  const [pendingButton, setPendingButton] = useState(null);
 
   useEffect(() => {
     try {
@@ -252,44 +255,62 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
     }
 
     const sequence = latestSequences.find((item) => item.id === selectedSequenceId) || latestSequences[0] || DEFAULT_SEQUENCE;
-    const key = String(lead.id) + ':' + sequence.id;
-    const savedStep = Math.min(Math.max(0, Number(latestProgress[key] || 0)), sequence.messages.length);
-    const step = savedStep >= sequence.messages.length ? 0 : savedStep;
-    if (step !== savedStep) latestProgress = { ...latestProgress, [key]: 0 };
-
     const defaultContact = resolveContact(lead.name || '');
-    const defaultName = defaultContact.name;
-    const defaultTreatment = defaultContact.treatment;
-    const defaultText = renderMessage(sequence.messages[step] || sequence.messages[0], {
-      nome: defaultName,
-      primeiro_nome: defaultName.split(/\s+/)[0] || '',
-      tratamento: defaultTreatment,
-      saudacao: getGreeting(),
-      cidade: lead.city || lead.address || '',
-      categoria: lead.category || '',
-    });
-
     setSequences(latestSequences);
     setProgress(latestProgress);
     setSelectedSequenceId(sequence.id);
-    setContactName(defaultName);
-    setContactTreatment(defaultTreatment);
+    setContactName(defaultContact.name);
+    setContactTreatment(defaultContact.treatment);
     setFeedback('');
-    setScreen('flow');
+    setPendingButton(null);
+    setScreen('buttons');
     setIsOpen(true);
-    if (whatsappUrl && defaultText) {
-      const whatsappWindow = window.open(withMessage(whatsappUrl, defaultText), '_blank', 'noopener,noreferrer');
-      if (whatsappWindow && onWhatsAppActivity) {
-        onWhatsAppActivity(lead.id, {
+  }
+
+  function openMessageButton(template) {
+    if (!whatsappUrl) {
+      setFeedback('Este lead não possui um número de WhatsApp válido para abrir a conversa.');
+      return;
+    }
+    const message = renderMessage(template.message, { ...values, saudacao: getGreeting() });
+    if (!message) return;
+    const whatsappWindow = window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
+    if (!whatsappWindow) {
+      setFeedback('O navegador bloqueou a abertura do WhatsApp. Permita pop-ups e tente novamente.');
+      return;
+    }
+
+    setPendingButton(template);
+    setFeedback('Mensagem preparada no WhatsApp. Confira o texto e toque em Enviar; depois volte aqui e confirme o envio.');
+    if (onWhatsAppActivity) {
+      onWhatsAppActivity(lead.id, {
+        whatsapp_tracking_status: 'active',
+        whatsapp_started_at: lead.whatsapp_started_at || new Date().toISOString(),
+        whatsapp_total_messages: WHATSAPP_MESSAGE_BUTTONS.length,
+        whatsapp_last_message: `${template.id} — ${template.title} (preparada)`,
+        whatsapp_last_message_at: new Date().toISOString(),
+      }).catch((error) => setFeedback(`WhatsApp aberto, mas não consegui salvar o acompanhamento: ${error.message}`));
+    }
+  }
+
+  async function confirmMessageButtonSent() {
+    if (!pendingButton) return;
+    try {
+      const sentCount = Number(lead.whatsapp_messages_sent || 0) + 1;
+      if (onWhatsAppActivity) {
+        await onWhatsAppActivity(lead.id, {
           whatsapp_tracking_status: 'active',
-          whatsapp_started_at: lead.whatsapp_started_at || new Date().toISOString(),
-          whatsapp_total_messages: sequence.messages.length,
-          whatsapp_last_message: 'Primeira abordagem preparada',
+          whatsapp_messages_sent: sentCount,
+          whatsapp_total_messages: WHATSAPP_MESSAGE_BUTTONS.length,
+          whatsapp_last_message: `${pendingButton.id} — ${pendingButton.title} (envio confirmado)`,
           whatsapp_last_message_at: new Date().toISOString(),
-        }).then(() => {
-          setFeedback('Conversa adicionada ao painel de leads em andamento. Confira a mensagem no WhatsApp e toque em Enviar.');
-        }).catch((error) => setFeedback(`WhatsApp aberto, mas não consegui salvar o acompanhamento: ${error.message}`));
+        });
       }
+      if (onContactConfirmed) await onContactConfirmed(lead.id, 'whatsapp');
+      setPendingButton(null);
+      setFeedback('Envio confirmado e progresso atualizado no painel de conversas em andamento.');
+    } catch (error) {
+      setFeedback(`Não consegui confirmar o envio no CRM: ${error.message}. Tente novamente.`);
     }
   }
 
@@ -557,9 +578,47 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
               <button type="button" className="wa-sequence-close" onClick={() => setIsOpen(false)} aria-label="Fechar">×</button>
             </header>
 
+            {screen === 'buttons' && (
+              <div className="wa-message-buttons-screen">
+                <div className="wa-sequence-toolbar">
+                  <label>Categoria de mensagens
+                    <select value={selectedButtonCategory} onChange={(event) => setSelectedButtonCategory(event.target.value)}>
+                      {WHATSAPP_MESSAGE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                    </select>
+                  </label>
+                  <button type="button" className="wa-sequence-secondary" onClick={() => setScreen('flow')}>Roteiros personalizados</button>
+                </div>
+
+                <div className="wa-message-button-list">
+                  {WHATSAPP_MESSAGE_BUTTONS.filter((item) => item.category === selectedButtonCategory).map((item) => (
+                    <article className="wa-message-button-card" key={item.id}>
+                      <div className="wa-message-button-copy">
+                        <span className="wa-message-button-number">BOTÃO {item.id}</span>
+                        <strong>{item.title}</strong>
+                        <p>{item.description}</p>
+                      </div>
+                      <button type="button" className="wa-sequence-primary" onClick={() => openMessageButton(item)}>Abrir no WhatsApp ↗</button>
+                    </article>
+                  ))}
+                </div>
+
+                {pendingButton && (
+                  <div className="wa-message-pending-confirm">
+                    <div><strong>{pendingButton.id} — {pendingButton.title}</strong><p>Depois de tocar em Enviar no WhatsApp, volte e confirme para atualizar o histórico da lead.</p></div>
+                    <button type="button" className="wa-sequence-primary" onClick={confirmMessageButtonSent}>Já enviei — registrar</button>
+                  </div>
+                )}
+
+                <div className="wa-sequence-footer">
+                  <p>Cada botão prepara a mensagem no WhatsApp para você revisar e enviar manualmente. O Escarlate não envia mensagens sozinho. A lead entra no painel de conversas em andamento quando você prepara a primeira mensagem.</p>
+                </div>
+              </div>
+            )}
+
             {screen === 'flow' && (
               <>
                 <div className="wa-sequence-toolbar">
+                  <button type="button" className="wa-sequence-secondary" onClick={() => setScreen('buttons')}>← Voltar aos botões</button>
                   <label>Roteiro
                     <select value={activeSequence.id} onChange={(event) => { setSelectedSequenceId(event.target.value); setFeedback(''); }}>
                       {sequences.map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name}</option>)}
