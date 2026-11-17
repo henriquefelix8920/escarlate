@@ -151,7 +151,7 @@ function migrateDefaultSequence(sequence) {
   return { ...sequence, messages };
 }
 
-export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContactConfirmed, onWhatsAppActivity }) {
+export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContactConfirmed, onWhatsAppActivity, triggerLabel = 'Assistente WhatsApp', triggerClassName }) {
   const [sequences, setSequences] = useState([DEFAULT_SEQUENCE]);
   const [progress, setProgress] = useState({});
   const [storageReady, setStorageReady] = useState(false);
@@ -530,10 +530,10 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
 
   return (
     <>
-      <button type="button" className="whatsapp-action whatsapp-assistant-action" onClick={startConversation}>
+      <button type="button" className={triggerClassName || "whatsapp-action whatsapp-assistant-action"} onClick={startConversation}>
         <span className="whatsapp-assistant-icon" aria-hidden="true">◉</span>
         <span className="whatsapp-assistant-copy">
-          <strong>Assistente WhatsApp</strong>
+          <strong>{triggerLabel}</strong>
           <small>24 botões de mensagens</small>
         </span>
       </button>
