@@ -51,6 +51,31 @@ export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpe
   const [preparedMessage, setPreparedMessage] = useState('');
   const [copying, setCopying] = useState(false);
   const textareaRef = useRef(null);
+  const contactRegistered = useRef(false);
+
+  async function registerOpenedProfile(profileWindow) {
+    if (!profileWindow) return false;
+    profileWindow.opener = null;
+    if (onOpen && !contactRegistered.current) {
+      await onOpen();
+      contactRegistered.current = true;
+    }
+    return true;
+  }
+
+  async function openProfile() {
+    const profileWindow = window.open(profileUrl, '_blank');
+    if (!profileWindow) {
+      setFeedback('O navegador bloqueou a abertura do Instagram. Permita pop-ups e tente novamente. O lead não foi marcado como contatado.');
+      return;
+    }
+    try {
+      await registerOpenedProfile(profileWindow);
+      setFeedback('Perfil do Instagram aberto. Lead marcado como contatado.');
+    } catch (error) {
+      setFeedback('O perfil foi aberto, mas não consegui marcar o lead como contatado: ' + error.message);
+    }
+  }
   const values = useMemo(() => contactValues(lead), [lead]);
   const messages = WHATSAPP_MESSAGE_BUTTONS.filter((item) => item.category === category);
 
@@ -63,14 +88,20 @@ export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpe
       ? navigator.clipboard.writeText(text).then(() => true).catch(() => false)
       : Promise.resolve(false);
     const profileWindow = window.open(profileUrl, '_blank');
-    if (profileWindow) profileWindow.opener = null;
+    if (profileWindow) {
+      try {
+        await registerOpenedProfile(profileWindow);
+      } catch (error) {
+        setFeedback('O perfil foi aberto, mas não consegui marcar o lead como contatado: ' + error.message);
+      }
+    }
     setCopying(true);
     const copied = await copyPromise;
     setCopying(false);
     if (copied) setFeedback('Mensagem copiada! O perfil foi aberto em outra aba. Entre no Direct, cole, revise e envie manualmente.');
     else setFeedback('O perfil foi aberto. O navegador bloqueou a cópia automática; volte a esta aba e clique em Copiar mensagem.');
     if (!profileWindow) {
-      setFeedback((current) => current + ' Se o perfil não abriu, permita pop-ups ou use Abrir perfil.');
+      setFeedback((current) => current + ' Se o perfil não abriu, permita pop-ups ou use Abrir perfil. O lead não foi marcado como contatado.');
     } else if (onActivity) {
       const now = new Date().toISOString();
       try {
@@ -103,15 +134,8 @@ export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpe
     <>
       <button type="button" className="instagram-assistant-action" onClick={() => {
         setIsOpen(true);
-        setFeedback('Registrando lead como contatado…');
+        setFeedback('Escolha uma mensagem para preparar o Direct ou abra o perfil. O lead só será marcado como contatado quando o Instagram abrir.');
         setPreparedMessage('');
-        if (onOpen) {
-          Promise.resolve(onOpen()).then(() => {
-            setFeedback('Lead marcado como contatado. Agora escolha uma mensagem para preparar o Direct.');
-          }).catch((error) => {
-            setFeedback('Não consegui marcar o lead como contatado: ' + error.message);
-          });
-        }
       }}>
         <span className="instagram-assistant-icon" aria-hidden="true">◎</span>
         <span className="instagram-assistant-copy"><strong>Assistente Instagram</strong><small>Preparar mensagem para Direct</small></span>
@@ -143,7 +167,7 @@ export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpe
                 <textarea id="instagram-prepared-text" ref={(element) => { textareaRef.current = element; }} value={preparedMessage} readOnly rows={6} onFocus={(event) => event.target.select()} />
                 <div className="instagram-prepared-actions">
                   <button type="button" onClick={copyPreparedMessage} disabled={copying}>{copying ? 'Copiando…' : 'Copiar mensagem'}</button>
-                  <button type="button" className="instagram-open-profile" onClick={() => { const profileWindow = window.open(profileUrl, '_blank'); if (profileWindow) profileWindow.opener = null; }}>Abrir perfil</button>
+                  <button type="button" className="instagram-open-profile" onClick={openProfile}>Abrir perfil</button>
                 </div>
               </div>
             )}
