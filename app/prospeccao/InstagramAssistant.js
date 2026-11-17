@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { WHATSAPP_MESSAGE_BUTTONS } from './whatsapp-message-buttons';
 
 const categories = [...new Set(WHATSAPP_MESSAGE_BUTTONS.map((item) => item.category))];
@@ -50,7 +50,7 @@ export default function InstagramAssistant({ lead, profileUrl }) {
   const [feedback, setFeedback] = useState('');
   const [preparedMessage, setPreparedMessage] = useState('');
   const [copying, setCopying] = useState(false);
-  const textareaRef = useMemo(() => ({ current: null }), []);
+  const textareaRef = useRef(null);
   const values = useMemo(() => contactValues(lead), [lead]);
   const messages = WHATSAPP_MESSAGE_BUTTONS.filter((item) => item.category === category);
 
