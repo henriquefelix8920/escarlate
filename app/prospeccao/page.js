@@ -367,14 +367,23 @@ export default function ProspeccaoPage() {
                     <div className="whatsapp-pipeline-progress"><span style={{ width: percent + '%' }} /></div>
                     <small>{lead.whatsapp_last_message || 'Primeira abordagem preparada'}{lead.whatsapp_last_message_at ? ' · ' + new Date(lead.whatsapp_last_message_at).toLocaleString('pt-BR') : ''}</small>
                   </div>
-                  <button type="button" className="whatsapp-pipeline-resume" onClick={() => {
-                    setFilter('all');
-                    setQuery('');
-                    window.setTimeout(() => {
-                      const target = document.getElementById('lead-' + lead.id);
-                      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 120);
-                  }}>Localizar lead ↘</button>
+                  <div className="whatsapp-pipeline-actions">
+                    <button type="button" className="whatsapp-pipeline-resume" onClick={() => {
+                      setFilter('all');
+                      setQuery('');
+                      window.setTimeout(() => {
+                        const target = document.getElementById('lead-' + lead.id);
+                        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 120);
+                    }}>Localizar lead ↘</button>
+                    <button type="button" className="whatsapp-pipeline-archive" onClick={() => {
+                      registerWhatsAppActivity(lead.id, {
+                        whatsapp_tracking_status: 'archived',
+                        whatsapp_last_message: 'Acompanhamento arquivado',
+                        whatsapp_last_message_at: new Date().toISOString(),
+                      }).catch((err) => setError(err.message));
+                    }}>Arquivar</button>
+                  </div>
                 </article>;
               })}
           </div>
