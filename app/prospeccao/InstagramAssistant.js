@@ -62,7 +62,8 @@ export default function InstagramAssistant({ lead, profileUrl }) {
     const copyPromise = navigator.clipboard?.writeText
       ? navigator.clipboard.writeText(text).then(() => true).catch(() => false)
       : Promise.resolve(false);
-    const profileWindow = window.open(profileUrl, '_blank', 'noopener,noreferrer');
+    const profileWindow = window.open(profileUrl, '_blank');
+    if (profileWindow) profileWindow.opener = null;
     setCopying(true);
     const copied = await copyPromise;
     setCopying(false);
@@ -114,7 +115,7 @@ export default function InstagramAssistant({ lead, profileUrl }) {
                 <textarea id="instagram-prepared-text" ref={(element) => { textareaRef.current = element; }} value={preparedMessage} readOnly rows={6} onFocus={(event) => event.target.select()} />
                 <div className="instagram-prepared-actions">
                   <button type="button" onClick={copyPreparedMessage} disabled={copying}>{copying ? 'Copiando…' : 'Copiar mensagem'}</button>
-                  <button type="button" className="instagram-open-profile" onClick={() => window.open(profileUrl, '_blank', 'noopener,noreferrer')}>Abrir perfil</button>
+                  <button type="button" className="instagram-open-profile" onClick={() => { const profileWindow = window.open(profileUrl, '_blank'); if (profileWindow) profileWindow.opener = null; }}>Abrir perfil</button>
                 </div>
               </div>
             )}
