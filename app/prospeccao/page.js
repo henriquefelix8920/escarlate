@@ -87,6 +87,7 @@ export default function ProspeccaoPage() {
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [conversationQuery, setConversationQuery] = useState('');
+  const [conversationsExpanded, setConversationsExpanded] = useState(false);
   const [filter, setFilter] = useState('all');
   const [saving, setSaving] = useState({});
   const [contactedToday, setContactedToday] = useState(0);
@@ -368,10 +369,23 @@ export default function ProspeccaoPage() {
         </section>
 
         <section id="whatsapp-pipeline" className="whatsapp-pipeline-section">
-          <div className="leads-heading">
-            <div><span className="eyebrow">ACOMPANHAMENTO DE CONTATOS</span><h2>Conversas em andamento</h2><p>Leads com uma abordagem preparada no WhatsApp ou Instagram para você retomar depois.</p></div>
-            <span className="lead-total">{activeConversations.length} em andamento</span>
+          <div className="conversation-tab-heading">
+            <div className="leads-heading">
+              <div><span className="eyebrow">ACOMPANHAMENTO DE CONTATOS</span><h2>Conversas em andamento</h2><p>Leads com uma abordagem preparada no WhatsApp ou Instagram para você retomar depois.</p></div>
+              <span className="lead-total">{activeConversations.length} em andamento</span>
+            </div>
+            <button
+              type="button"
+              className="conversation-tab-toggle"
+              aria-expanded={conversationsExpanded}
+              aria-controls="whatsapp-pipeline-content"
+              onClick={() => setConversationsExpanded((expanded) => !expanded)}
+            >
+              <span>{conversationsExpanded ? 'Recolher conversas' : 'Abrir conversas'}</span>
+              <span className={'conversation-tab-chevron' + (conversationsExpanded ? ' is-expanded' : '')} aria-hidden="true">⌄</span>
+            </button>
           </div>
+          {conversationsExpanded && <div id="whatsapp-pipeline-content" className="conversation-tab-content">
           <div className="conversation-toolbar"><label className="conversation-search"><span>⌕</span><input value={conversationQuery} onChange={(event) => setConversationQuery(event.target.value)} placeholder="Buscar conversa por nome, telefone ou empresa..." aria-label="Buscar conversas em andamento" /></label><span className="conversation-results">{visibleConversations.length} de {activeConversations.length}</span></div>
           <div className="whatsapp-pipeline-list">
             {activeConversations.length === 0
@@ -415,6 +429,8 @@ export default function ProspeccaoPage() {
                   </div>
                 </article>;
               })}
+          </div>
+          }
           </div>
         </section>
 
