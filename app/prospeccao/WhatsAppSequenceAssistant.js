@@ -166,7 +166,6 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
   const [followUpAwaitingConfirmation, setFollowUpAwaitingConfirmation] = useState(false);
   const [followUpFeedback, setFollowUpFeedback] = useState('');
   const [selectedButtonCategory, setSelectedButtonCategory] = useState(WHATSAPP_MESSAGE_CATEGORIES[0]);
-  const [pendingButton, setPendingButton] = useState(null);
 
   useEffect(() => {
     try {
@@ -262,12 +261,11 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
     setContactName(defaultContact.name);
     setContactTreatment(defaultContact.treatment);
     setFeedback('');
-    setPendingButton(null);
     setScreen('buttons');
     setIsOpen(true);
   }
 
-  function openMessageButton(template) {
+  async function openMessageButton(template) {
     if (!whatsappUrl) {
       setFeedback('Este lead não possui um número de WhatsApp válido para abrir a conversa.');
       return;
@@ -280,37 +278,27 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
       return;
     }
 
-    setPendingButton(template);
-    setFeedback('Mensagem preparada no WhatsApp. Confira o texto e toque em Enviar; depois volte aqui e confirme o envio.');
-    if (onWhatsAppActivity) {
-      onWhatsAppActivity(lead.id, {
-        whatsapp_tracking_status: 'active',
-        whatsapp_started_at: lead.whatsapp_started_at || new Date().toISOString(),
-        whatsapp_total_messages: WHATSAPP_MESSAGE_BUTTONS.length,
-        whatsapp_last_message: `${template.id} — ${template.title} (preparada)`,
-        whatsapp_last_message_at: new Date().toISOString(),
-      }).catch((error) => setFeedback(`WhatsApp aberto, mas não consegui salvar o acompanhamento: ${error.message}`));
-    }
-  }
-
-  async function confirmMessageButtonSent() {
-    if (!pendingButton) return;
+    // O clique que abre a mensagem é tratado como abordagem iniciada/registrada.
+    // O WhatsApp não informa ao Escarlate se o usuário realmente tocou em Enviar.
+    const now = new Date().toISOString();
+    const nextCount = Number(lead.whatsapp_messages_sent || 0) + 1;
+    setFeedback('Mensagem aberta no WhatsApp e registrada no acompanhamento. Confira e envie por lá; não precisa voltar para confirmar.');
     try {
-      const sentCount = Number(lead.whatsapp_messages_sent || 0) + 1;
       if (onWhatsAppActivity) {
         await onWhatsAppActivity(lead.id, {
           whatsapp_tracking_status: 'active',
-          whatsapp_messages_sent: sentCount,
+          whatsapp_started_at: lead.whatsapp_started_at || now,
+          whatsapp_messages_sent: nextCount,
           whatsapp_total_messages: WHATSAPP_MESSAGE_BUTTONS.length,
-          whatsapp_last_message: `${pendingButton.id} — ${pendingButton.title} (envio confirmado)`,
-          whatsapp_last_message_at: new Date().toISOString(),
+          whatsapp_last_message: `${template.id} — ${template.title} (aberta no WhatsApp; envio não verificado)`,
+          whatsapp_last_message_at: now,
         });
       }
-      if (onContactConfirmed) await onContactConfirmed(lead.id, 'whatsapp', lead.status === 'new' ? 'contacted' : null);
-      setPendingButton(null);
-      setFeedback('Envio confirmado e progresso atualizado no painel de conversas em andamento.');
+      if (onContactConfirmed) {
+        await onContactConfirmed(lead.id, 'whatsapp', lead.status === 'new' ? 'contacted' : null);
+      }
     } catch (error) {
-      setFeedback(`Não consegui confirmar o envio no CRM: ${error.message}. Tente novamente.`);
+      setFeedback(`WhatsApp aberto, mas não consegui salvar o registro no CRM: ${error.message}. Atualize o painel e tente novamente.`);
     }
   }
 
@@ -602,15 +590,8 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
                   ))}
                 </div>
 
-                {pendingButton && (
-                  <div className="wa-message-pending-confirm">
-                    <div><strong>{pendingButton.id} — {pendingButton.title}</strong><p>Depois de tocar em Enviar no WhatsApp, volte e confirme para atualizar o histórico da lead.</p></div>
-                    <button type="button" className="wa-sequence-primary" onClick={confirmMessageButtonSent}>Já enviei — registrar</button>
-                  </div>
-                )}
-
                 <div className="wa-sequence-footer">
-                  <p>Cada botão prepara a mensagem no WhatsApp para você revisar e enviar manualmente. O Escarlate não envia mensagens sozinho. A lead entra no painel de conversas em andamento quando você prepara a primeira mensagem.</p>
+                  <p>Ao clicar em um botão, o Escarlate abre a mensagem no WhatsApp e registra automaticamente a abordagem no painel — sem precisar voltar para confirmar. Você ainda revisa e toca em Enviar manualmente. O WhatsApp não permite que o Escarlate confirme se a mensagem foi realmente enviada.</p>
                 </div>
               </div>
             )}
