@@ -31,7 +31,8 @@ export default function InstagramAssistant({ lead, profileUrl }) {
 
   async function prepareMessage(item) {
     const text = renderMessage(item.message, values);
-    const profileWindow = window.open(profileUrl, '_blank', 'noopener,noreferrer');
+    const profileWindow = window.open(profileUrl, '_blank');
+    if (profileWindow) profileWindow.opener = null;
     try {
       await navigator.clipboard.writeText(text);
       setFeedback('Mensagem copiada! O perfil foi aberto em outra aba. Entre no Direct, cole, revise e envie manualmente.');
