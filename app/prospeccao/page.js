@@ -18,7 +18,7 @@ const capitalizeCity = (value) => String(value || '')
   .map((part, index) => {
     const text = part.trim();
     if (index > 0 && /^[a-z]{2}$/i.test(text)) return text.toUpperCase();
-    return text.toLocaleLowerCase('pt-BR').replace(/(^|[\\s-])\\p{L}/gu, (letter) => letter.toLocaleUpperCase('pt-BR'));
+    return text.toLocaleLowerCase('pt-BR').replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toLocaleUpperCase('pt-BR'));
   })
   .join(', ');
 
