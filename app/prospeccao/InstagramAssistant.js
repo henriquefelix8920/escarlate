@@ -44,22 +44,16 @@ async function copyText(text, textareaRef) {
   }
 }
 
-export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpen }) {
+export default function InstagramAssistant({ lead, profileUrl, onActivity }) {
   const [isOpen, setIsOpen] = useState(false);
   const [category, setCategory] = useState(categories[0] || '');
   const [feedback, setFeedback] = useState('');
   const [preparedMessage, setPreparedMessage] = useState('');
   const [copying, setCopying] = useState(false);
   const textareaRef = useRef(null);
-  const contactRegistered = useRef(false);
-
-  async function registerOpenedProfile(profileWindow) {
+  function registerOpenedProfile(profileWindow) {
     if (!profileWindow) return false;
     profileWindow.opener = null;
-    if (onOpen && !contactRegistered.current) {
-      await onOpen();
-      contactRegistered.current = true;
-    }
     return true;
   }
 
@@ -70,10 +64,10 @@ export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpe
       return;
     }
     try {
-      await registerOpenedProfile(profileWindow);
-      setFeedback('Perfil do Instagram aberto. Lead marcado como contatado.');
+      registerOpenedProfile(profileWindow);
+      setFeedback('Perfil do Instagram aberto. A etapa comercial não foi alterada.');
     } catch (error) {
-      setFeedback('O perfil foi aberto, mas não consegui marcar o lead como contatado: ' + error.message);
+      setFeedback('Não foi possível concluir a abertura do perfil: ' + error.message);
     }
   }
   const values = useMemo(() => contactValues(lead), [lead]);
@@ -90,9 +84,9 @@ export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpe
     const profileWindow = window.open(profileUrl, '_blank');
     if (profileWindow) {
       try {
-        await registerOpenedProfile(profileWindow);
+        registerOpenedProfile(profileWindow);
       } catch (error) {
-        setFeedback('O perfil foi aberto, mas não consegui marcar o lead como contatado: ' + error.message);
+        setFeedback('Não foi possível concluir a abertura do perfil: ' + error.message);
       }
     }
     setCopying(true);
@@ -101,7 +95,7 @@ export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpe
     if (copied) setFeedback('Mensagem copiada! O perfil foi aberto em outra aba. Entre no Direct, cole, revise e envie manualmente.');
     else setFeedback('O perfil foi aberto. O navegador bloqueou a cópia automática; volte a esta aba e clique em Copiar mensagem.');
     if (!profileWindow) {
-      setFeedback((current) => current + ' Se o perfil não abriu, permita pop-ups ou use Abrir perfil. O lead não foi marcado como contatado.');
+      setFeedback((current) => current + ' Se o perfil não abriu, permita pop-ups ou use Abrir perfil.');
     } else if (onActivity) {
       const now = new Date().toISOString();
       try {
@@ -134,7 +128,7 @@ export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpe
     <>
       <button type="button" className="instagram-assistant-action" onClick={() => {
         setIsOpen(true);
-        setFeedback('Escolha uma mensagem para preparar o Direct ou abra o perfil. O lead só será marcado como contatado quando o Instagram abrir.');
+        setFeedback('Escolha uma mensagem para preparar o Direct ou abra o perfil. A etapa comercial será atualizada manualmente por você no funil.');
         setPreparedMessage('');
       }}>
         <span className="instagram-assistant-icon" aria-hidden="true">◎</span>
