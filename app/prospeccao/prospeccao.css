@@ -177,3 +177,8 @@
 .wa-message-pending-confirm p{margin:5px 0 0;color:#9aa4b5;font-size:.68rem;line-height:1.45}
 .wa-message-pending-confirm button{flex:0 0 auto;white-space:nowrap}
 @media(max-width:600px){.wa-message-button-card,.wa-message-pending-confirm{align-items:stretch;flex-direction:column}.wa-message-button-card .wa-sequence-primary,.wa-message-pending-confirm button{width:100%}}
+
+.whatsapp-pipeline-actions{display:flex;flex:0 0 auto;gap:7px}
+.whatsapp-pipeline-archive{border:1px solid rgba(237,64,83,.3);border-radius:9px;padding:9px 11px;background:rgba(237,64,83,.07);color:#e99aa3;font-size:.7rem;font-weight:700;cursor:pointer}
+.whatsapp-pipeline-archive:hover{background:rgba(237,64,83,.14)}
+@media(max-width:600px){.whatsapp-pipeline-actions{width:100%}.whatsapp-pipeline-actions button{flex:1}}
