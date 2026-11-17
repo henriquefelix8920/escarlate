@@ -142,3 +142,21 @@
 .site-presence-badge{display:inline-flex;align-items:center;max-width:100%;padding:5px 8px;border:1px solid transparent;border-radius:20px;font-size:.64rem;font-weight:750;line-height:1.25;white-space:normal}
 .site-presence-badge.has-social{color:#9bd8ff;background:rgba(69,151,201,.12);border-color:rgba(69,151,201,.28)}
 .site-presence-badge.no-social{color:#c0c6d2;background:rgba(139,148,165,.1);border-color:rgba(139,148,165,.22)}
+
+
+/* Painel de conversas iniciadas pelo Assistente WhatsApp */
+.whatsapp-pipeline-section{margin:0 0 28px;padding:22px;background:var(--crm-panel);border:1px solid var(--crm-line);border-radius:16px}
+.whatsapp-pipeline-section .leads-heading{margin-bottom:15px}
+.whatsapp-pipeline-list{display:grid;gap:10px}
+.whatsapp-pipeline-card{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 17px;background:#0e1017;border:1px solid rgba(53,201,139,.25);border-radius:12px}
+.whatsapp-pipeline-card-main{min-width:0;flex:1}
+.whatsapp-pipeline-card .lead-name-row h3{margin:0;font-size:.95rem}
+.whatsapp-pipeline-card-main>p{margin:6px 0 10px;color:var(--crm-muted);font-size:.75rem}
+.whatsapp-pipeline-progress-label{display:flex;justify-content:space-between;gap:10px;color:#b9c1ce;font-size:.68rem}
+.whatsapp-pipeline-progress-label strong{color:#7de0ad}
+.whatsapp-pipeline-progress{height:6px;margin:7px 0 8px;background:#292d3a;border-radius:99px;overflow:hidden}
+.whatsapp-pipeline-progress span{display:block;height:100%;background:linear-gradient(90deg,#ed4053,#35c98b);border-radius:99px;transition:width .2s}
+.whatsapp-pipeline-card-main>small{display:block;color:#8d96a8;font-size:.67rem;line-height:1.45;overflow-wrap:anywhere}
+.whatsapp-pipeline-resume{flex:0 0 auto;border:1px solid rgba(53,201,139,.4);border-radius:9px;padding:9px 12px;background:rgba(53,201,139,.1);color:#8be5b8;font-size:.72rem;font-weight:750;cursor:pointer}
+.whatsapp-pipeline-resume:hover{background:rgba(53,201,139,.18)}
+@media(max-width:600px){.whatsapp-pipeline-section{padding:16px}.whatsapp-pipeline-card{align-items:flex-start;flex-direction:column}.whatsapp-pipeline-resume{width:100%}}
