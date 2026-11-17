@@ -7,13 +7,17 @@ const categories = [...new Set(WHATSAPP_MESSAGE_BUTTONS.map((item) => item.categ
 
 function contactValues(lead) {
   const raw = String(lead?.name || '').trim();
-  const cleaned = raw.replace(/^(dra?\.?|nutricionista|clínica|consultório)\s+/i, '').split(/[|–—,]/)[0].trim();
+  const cleaned = raw.replace(/^(dra?\.?|médica|médico|clínica|consultório)\s+/i, '').split(/[|–—,]/)[0].trim();
   return {
     nome: cleaned || raw,
+    nome_empresa: raw,
     primeiro_nome: (cleaned || raw).split(/\s+/)[0] || '',
-    tratamento: '',
+    tratamento: /\b(cl[ií]nica|consult[oó]rio|centro m[eé]dico|hospital|instituto)\b/i.test(raw) && !/\bdra?\.?\s/i.test(raw) ? '' : 'Dra.',
     cidade: lead?.city || '',
-    categoria: lead?.category || '',
+    categoria: lead?.category || 'atendimento médico',
+    observacao: lead?.instagram || lead?.profile
+      ? 'Notei que você já mantém presença no Instagram. Um site próprio pode complementar esse canal e reunir suas especialidades, informações de atendimento e formas de contato.'
+      : 'Não encontrei um site próprio associado ao seu perfil no Google Maps. Isso pode ser uma oportunidade para apresentar suas especialidades e informações de atendimento em um espaço profissional.',
     saudacao: 'Olá',
   };
 }
