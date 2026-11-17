@@ -542,7 +542,7 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
         <span className="whatsapp-assistant-icon" aria-hidden="true">◉</span>
         <span className="whatsapp-assistant-copy">
           <strong>Assistente WhatsApp</strong>
-          <small>Sequência de mensagens</small>
+          <small>24 botões de mensagens</small>
         </span>
       </button>
 
