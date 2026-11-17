@@ -12,6 +12,15 @@ const stages = [
 ];
 const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(Number(value || 0));
 const digits = (value) => String(value || '').replace(/\D/g, '');
+const capitalizeCity = (value) => String(value || '')
+  .trim()
+  .split(',')
+  .map((part, index) => {
+    const text = part.trim();
+    if (index > 0 && /^[a-z]{2}$/i.test(text)) return text.toUpperCase();
+    return text.toLocaleLowerCase('pt-BR').replace(/(^|[\\s-])\\p{L}/gu, (letter) => letter.toLocaleUpperCase('pt-BR'));
+  })
+  .join(', ');
 
 const SOCIAL_PROFILE_LABELS = [
   ['instagram.com', 'Instagram'], ['facebook.com', 'Facebook'], ['fb.com', 'Facebook'],
@@ -190,7 +199,7 @@ export default function ProspeccaoPage() {
     try {
       const response = await fetch('/api/search', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ city, category, limit: Number(limit) }),
+        body: JSON.stringify({ city: capitalizeCity(city), category, limit: Number(limit) }),
       });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data.detail || data.error || 'Não foi possível iniciar a captura.');
@@ -393,7 +402,7 @@ export default function ProspeccaoPage() {
           <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Busque empresas locais que ainda não possuem site.</p></div><span className="capture-icon">⌕</span></div>
           <form onSubmit={startSearch} className="prospect-form">
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
-            <label>Cidade<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
+            <label>Cidade<input value={city} onChange={(e) => setCity(capitalizeCity(e.target.value))} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
             <label className="limit-field">Meta de leads<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[20,40,60,100].map((n) => <option key={n} value={n}>{n} leads</option>)}</select></label>
             <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
