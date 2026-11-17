@@ -86,6 +86,7 @@ export default function ProspeccaoPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [conversationQuery, setConversationQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [saving, setSaving] = useState({});
   const [contactedToday, setContactedToday] = useState(0);
@@ -323,6 +324,13 @@ export default function ProspeccaoPage() {
     : null;
   const jobLooksStalled = job?.status === 'running' && heartbeatAgeSeconds !== null && heartbeatAgeSeconds > 90;
 
+  const activeConversations = useMemo(() => leads.filter((lead) => lead.whatsapp_tracking_status === 'active' && !['won', 'lost'].includes(lead.status)), [leads]);
+  const visibleConversations = useMemo(() => {
+    const term = conversationQuery.trim().toLocaleLowerCase('pt-BR');
+    if (!term) return activeConversations;
+    return activeConversations.filter((lead) => [lead.name, lead.phone, lead.city, lead.address, lead.category, lead.whatsapp_last_message, lead.notes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(term));
+  }, [activeConversations, conversationQuery]);
+
   const visible = noSite.filter((lead) => {
     const matchesFilter = filter === 'all' || (filter === 'pending' ? lead.status === 'new' : lead.status === filter);
     const text = [lead.name, lead.phone, lead.city, lead.address, lead.category, lead.instagram, lead.profile].filter(Boolean).join(' ').toLowerCase();
@@ -336,6 +344,7 @@ export default function ProspeccaoPage() {
         <div className="nav-caption">ESPAÇO DE TRABALHO</div>
         <a className="nav-item active" href="#dashboard">▦ <span>Visão geral</span></a>
         <a className="nav-item" href="#leads">◉ <span>Leads</span><b>{noSite.length}</b></a>
+        <a className="nav-item nav-item-conversations" href="#whatsapp-pipeline">◷ <span>Conversas em andamento</span><b>{activeConversations.length}</b></a>
         <a className="nav-item" href="#captura">⌕ <span>Prospecção</span></a>
         <div className="sidebar-bottom"><span className="status-dot" /> CRM conectado</div>
       </aside>
@@ -361,12 +370,15 @@ export default function ProspeccaoPage() {
         <section id="whatsapp-pipeline" className="whatsapp-pipeline-section">
           <div className="leads-heading">
             <div><span className="eyebrow">ACOMPANHAMENTO DO WHATSAPP</span><h2>Conversas em andamento</h2><p>Leads cujas mensagens foram abertas pelo Escarlate e registradas automaticamente para você retomar depois.</p></div>
-            <span className="lead-total">{leads.filter((lead) => lead.whatsapp_tracking_status === 'active').length} em andamento</span>
+            <span className="lead-total">{activeConversations.length} em andamento</span>
           </div>
+          <div className="conversation-toolbar"><label className="conversation-search"><span>⌕</span><input value={conversationQuery} onChange={(event) => setConversationQuery(event.target.value)} placeholder="Buscar conversa por nome, telefone ou empresa..." aria-label="Buscar conversas em andamento" /></label><span className="conversation-results">{visibleConversations.length} de {activeConversations.length}</span></div>
           <div className="whatsapp-pipeline-list">
-            {leads.filter((lead) => lead.whatsapp_tracking_status === 'active' && !['won', 'lost'].includes(lead.status)).length === 0
+            {activeConversations.length === 0
               ? <div className="empty-crm">Nenhuma conversa iniciada ainda. Ao preparar a primeira mensagem pelo Assistente WhatsApp, a lead aparecerá aqui.</div>
-              : leads.filter((lead) => lead.whatsapp_tracking_status === 'active' && !['won', 'lost'].includes(lead.status)).map((lead) => {
+              : visibleConversations.length === 0
+                ? <div className="empty-crm">Nenhuma conversa em andamento corresponde a “{conversationQuery}”.</div>
+                : visibleConversations.map((lead) => {
                 const sent = Number(lead.whatsapp_messages_sent || 0);
                 const total = Math.max(1, Number(lead.whatsapp_total_messages || 4));
                 const percent = Math.min(100, Math.round((sent / total) * 100));
