@@ -85,12 +85,12 @@ function inferTreatment(value) {
     for (const token of tokens) {
       if (LOCATION_PREPOSITIONS.has(token)) break;
       if (NON_NAME_WORDS.has(token)) continue;
-      if (AMBIGUOUS_FIRST_NAMES.has(token)) return '';
+      if (AMBIGUOUS_FIRST_NAMES.has(token)) return 'Dra.';
       if (FEMALE_FIRST_NAMES.has(token)) return 'Dra.';
       if (MALE_FIRST_NAMES.has(token)) return 'Dr.';
     }
   }
-  return '';
+  return 'Dra.';
 }
 
 function stripHonorific(value, stripDescriptors = false) {
