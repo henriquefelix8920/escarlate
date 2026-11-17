@@ -44,7 +44,7 @@ async function copyText(text, textareaRef) {
   }
 }
 
-export default function InstagramAssistant({ lead, profileUrl }) {
+export default function InstagramAssistant({ lead, profileUrl, onActivity }) {
   const [isOpen, setIsOpen] = useState(false);
   const [category, setCategory] = useState(categories[0] || '');
   const [feedback, setFeedback] = useState('');
@@ -69,7 +69,24 @@ export default function InstagramAssistant({ lead, profileUrl }) {
     setCopying(false);
     if (copied) setFeedback('Mensagem copiada! O perfil foi aberto em outra aba. Entre no Direct, cole, revise e envie manualmente.');
     else setFeedback('O perfil foi aberto. O navegador bloqueou a cópia automática; volte a esta aba e clique em Copiar mensagem.');
-    if (!profileWindow) setFeedback((current) => current + ' Se o perfil não abriu, permita pop-ups ou use Abrir perfil.');
+    if (!profileWindow) {
+      setFeedback((current) => current + ' Se o perfil não abriu, permita pop-ups ou use Abrir perfil.');
+    } else if (onActivity) {
+      const now = new Date().toISOString();
+      try {
+        await onActivity(lead.id, {
+          whatsapp_tracking_status: 'active',
+          whatsapp_started_at: lead.whatsapp_started_at || now,
+          whatsapp_messages_sent: 1,
+          whatsapp_total_messages: 1,
+          whatsapp_last_message: 'Instagram Direct — mensagem preparada (envio não verificado)',
+          whatsapp_last_message_at: now,
+        });
+        setFeedback((current) => current + ' Lead incluído em Conversas em andamento.');
+      } catch (error) {
+        setFeedback((current) => current + ' Não consegui registrar no CRM: ' + error.message);
+      }
+    }
   }
 
   async function copyPreparedMessage() {
