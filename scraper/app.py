@@ -276,8 +276,10 @@ async def _run_search(job_id: str, data: SearchRequest):
     job_row = job_result.data[0] if job_result.data else {}
     try:
         progress = json.loads(job_row.get("message") or "{}")
-        if not isinstance(progress, dict) or progress.get("version") != 1:
+        if not isinstance(progress, dict):
             progress = {}
+        elif progress.get("version") != 1:
+            progress = {"channel": progress.get("channel", "whatsapp")}
     except Exception:
         progress = {}
     progress = {
