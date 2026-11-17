@@ -150,7 +150,7 @@ function migrateDefaultSequence(sequence) {
   return { ...sequence, messages };
 }
 
-export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContactConfirmed }) {
+export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContactConfirmed, onWhatsAppActivity }) {
   const [sequences, setSequences] = useState([DEFAULT_SEQUENCE]);
   const [progress, setProgress] = useState({});
   const [storageReady, setStorageReady] = useState(false);
@@ -278,14 +278,33 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
     setScreen('flow');
     setIsOpen(true);
     if (whatsappUrl && defaultText) {
-      window.open(withMessage(whatsappUrl, defaultText), '_blank', 'noopener,noreferrer');
+      const whatsappWindow = window.open(withMessage(whatsappUrl, defaultText), '_blank', 'noopener,noreferrer');
+      if (whatsappWindow && onWhatsAppActivity) {
+        onWhatsAppActivity(lead.id, {
+          whatsapp_tracking_status: 'active',
+          whatsapp_started_at: lead.whatsapp_started_at || new Date().toISOString(),
+          whatsapp_total_messages: sequence.messages.length,
+          whatsapp_last_message: 'Primeira abordagem preparada',
+          whatsapp_last_message_at: new Date().toISOString(),
+        }).then(() => {
+          setFeedback('Conversa adicionada ao painel de leads em andamento. Confira a mensagem no WhatsApp e toque em Enviar.');
+        }).catch((error) => setFeedback(`WhatsApp aberto, mas não consegui salvar o acompanhamento: ${error.message}`));
+      }
     }
   }
 
   function openCurrentMessageInWhatsApp() {
     const message = renderMessage(activeSequence.messages[currentStep], { ...values, saudacao: getGreeting() });
     if (!whatsappUrl || !message) return;
-    window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
+    const whatsappWindow = window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
+    if (whatsappWindow && onWhatsAppActivity) {
+      onWhatsAppActivity(lead.id, {
+        whatsapp_tracking_status: 'active',
+        whatsapp_total_messages: activeSequence.messages.length,
+        whatsapp_last_message: `Mensagem ${currentStep + 1} preparada`,
+        whatsapp_last_message_at: new Date().toISOString(),
+      }).catch((error) => setFeedback(`Mensagem aberta, mas não consegui atualizar o painel: ${error.message}`));
+    }
   }
 
   async function openSampleWebsiteInWhatsApp() {
@@ -313,6 +332,13 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
     try {
       if (onContactConfirmed) {
         await onContactConfirmed(lead.id, 'whatsapp', 'interested');
+      }
+      if (onWhatsAppActivity) {
+        await onWhatsAppActivity(lead.id, {
+          whatsapp_tracking_status: 'active',
+          whatsapp_last_message: 'Demonstração do site preparada',
+          whatsapp_last_message_at: new Date().toISOString(),
+        });
       }
       if (!whatsappWindow) {
         setFeedback('Lead atualizado para Interessado, mas o navegador bloqueou a aba do WhatsApp. Permita pop-ups para abrir a mensagem.');
@@ -356,6 +382,13 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
 
     whatsappWindow.location.href = withMessage(whatsappUrl, message);
     whatsappWindow.opener = null;
+    if (onWhatsAppActivity) {
+      onWhatsAppActivity(lead.id, {
+        whatsapp_tracking_status: 'active',
+        whatsapp_last_message: 'Follow-up preparado',
+        whatsapp_last_message_at: new Date().toISOString(),
+      }).catch((error) => setFollowUpFeedback(`Mensagem aberta, mas não consegui atualizar o painel: ${error.message}`));
+    }
     setFollowUpAwaitingConfirmation(true);
     setFollowUpFeedback('Mensagem preparada no WhatsApp. Confira o texto e toque em Enviar; depois confirme aqui no CRM.');
   }
@@ -394,6 +427,20 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
     } catch (error) {
       setFeedback(`Não consegui registrar o contato e atualizar a etapa do lead: ${error.message} Tente confirmar novamente.`);
       return;
+    }
+
+    if (onWhatsAppActivity) {
+      try {
+        await onWhatsAppActivity(lead.id, {
+          whatsapp_tracking_status: isFinalStep ? 'completed' : 'active',
+          whatsapp_messages_sent: nextStep,
+          whatsapp_total_messages: activeSequence.messages.length,
+          whatsapp_last_message: `Mensagem ${currentStep + 1} confirmada como enviada`,
+          whatsapp_last_message_at: new Date().toISOString(),
+        });
+      } catch (error) {
+        setFeedback(`Contato registrado, mas não consegui atualizar o painel de acompanhamento: ${error.message}`);
+      }
     }
 
     const updatedProgress = { ...progress, [progressKey]: nextStep };
