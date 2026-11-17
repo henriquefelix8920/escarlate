@@ -7,10 +7,10 @@ const categories = [...new Set(WHATSAPP_MESSAGE_BUTTONS.map((item) => item.categ
 
 function contactValues(lead) {
   const raw = String(lead?.name || '').trim();
-  const cleaned = raw.replace(/^(dra?\\.?|nutricionista|clínica|consultório)\\s+/i, '').split(/[|–—,]/)[0].trim();
+  const cleaned = raw.replace(/^(dra?\.?|nutricionista|clínica|consultório)\s+/i, '').split(/[|–—,]/)[0].trim();
   return {
     nome: cleaned || raw,
-    primeiro_nome: (cleaned || raw).split(/\\s+/)[0] || '',
+    primeiro_nome: (cleaned || raw).split(/\s+/)[0] || '',
     tratamento: '',
     cidade: lead?.city || '',
     categoria: lead?.category || '',
@@ -19,7 +19,7 @@ function contactValues(lead) {
 }
 
 function renderMessage(template, values) {
-  return String(template || '').replace(/\\{([a-z_]+)\\}/gi, (_, key) => values[key] ?? '').replace(/[ \\t]{2,}/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();
+  return String(template || '').replace(/\{([a-z_]+)\}/gi, (_, key) => values[key] ?? '').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 async function copyText(text, textareaRef) {
