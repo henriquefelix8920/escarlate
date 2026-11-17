@@ -11,7 +11,7 @@ const DEFAULT_SEQUENCE = {
   id: 'nutricionistas-primeira-abordagem',
   name: 'Nutricionistas — primeira abordagem',
   messages: [
-    'Olá, {tratamento} {nome}!\nEspero que esteja tudo bem com você 🙏',
+    'Olá, {tratamento} {primeiro_nome}!\nEspero que esteja tudo bem com você 🙏',
     'Meu nome é Henrique, sou desenvolvedor web e trabalho com criação de sites profissionais para empresas e profissionais que desejam fortalecer sua presença digital.',
     'Estava pesquisando profissionais da sua região no Google e encontrei seu perfil.\nPercebi que você ainda não possui um site próprio.\nHoje, muitas pessoas pesquisam no Google antes de escolher um profissional.',
     'Ter um site pode ajudar a apresentar seus serviços, transmitir mais confiança e facilitar o contato de novos pacientes.\nEu tenho um site de demonstração para nutricionistas.\nPosso te mostrar?',
@@ -85,12 +85,12 @@ function inferTreatment(value) {
     for (const token of tokens) {
       if (LOCATION_PREPOSITIONS.has(token)) break;
       if (NON_NAME_WORDS.has(token)) continue;
-      if (AMBIGUOUS_FIRST_NAMES.has(token)) return '';
+      if (AMBIGUOUS_FIRST_NAMES.has(token)) return 'Dra.';
       if (FEMALE_FIRST_NAMES.has(token)) return 'Dra.';
       if (MALE_FIRST_NAMES.has(token)) return 'Dr.';
     }
   }
-  return '';
+  return 'Dra.';
 }
 
 function stripHonorific(value, stripDescriptors = false) {
@@ -151,7 +151,7 @@ function migrateDefaultSequence(sequence) {
   return { ...sequence, messages };
 }
 
-export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContactConfirmed, onWhatsAppActivity }) {
+export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContactConfirmed, onWhatsAppActivity, triggerLabel = 'Assistente WhatsApp', triggerClassName }) {
   const [sequences, setSequences] = useState([DEFAULT_SEQUENCE]);
   const [progress, setProgress] = useState({});
   const [storageReady, setStorageReady] = useState(false);
@@ -530,10 +530,10 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
 
   return (
     <>
-      <button type="button" className="whatsapp-action whatsapp-assistant-action" onClick={startConversation}>
+      <button type="button" className={triggerClassName || "whatsapp-action whatsapp-assistant-action"} onClick={startConversation}>
         <span className="whatsapp-assistant-icon" aria-hidden="true">◉</span>
         <span className="whatsapp-assistant-copy">
-          <strong>Assistente WhatsApp</strong>
+          <strong>{triggerLabel}</strong>
           <small>24 botões de mensagens</small>
         </span>
       </button>

@@ -4,7 +4,7 @@ export const WHATSAPP_MESSAGE_BUTTONS = [
     category: 'Primeiro contato',
     title: 'Primeiro contato',
     description: 'Nova lead; envie uma única vez e aguarde a resposta.',
-    message: 'Olá, {tratamento} {nome}! Tudo bem? 😊\n\nMeu nome é Henrique. Estava pesquisando nutricionistas em {cidade} pelo Google e encontrei seu perfil.\n\nTrabalho ajudando profissionais a fortalecerem sua presença no Google, facilitando que pessoas que procuram por seus serviços encontrem e conheçam seu trabalho.\n\nPercebi uma oportunidade interessante no seu perfil e gostaria de te mostrar uma ideia. Posso?',
+    message: 'Olá, {tratamento} {primeiro_nome}! Tudo bem? 😊\n\nMeu nome é Henrique. Estava pesquisando nutricionistas em {cidade} pelo Google e encontrei seu perfil.\n\nTrabalho ajudando profissionais a fortalecerem sua presença no Google, facilitando que pessoas que procuram por seus serviços encontrem e conheçam seu trabalho.\n\nPercebi uma oportunidade interessante no seu perfil e gostaria de te mostrar uma ideia. Posso?',
   },
   {
     id: '02',

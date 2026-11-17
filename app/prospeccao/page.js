@@ -377,14 +377,16 @@ export default function ProspeccaoPage() {
                     <small>{lead.whatsapp_last_message || 'Primeira abordagem preparada'}{lead.whatsapp_last_message_at ? ' · ' + new Date(lead.whatsapp_last_message_at).toLocaleString('pt-BR') : ''}</small>
                   </div>
                   <div className="whatsapp-pipeline-actions">
-                    <button type="button" className="whatsapp-pipeline-resume" onClick={() => {
-                      setFilter('all');
-                      setQuery('');
-                      window.setTimeout(() => {
-                        const target = document.getElementById('lead-' + lead.id);
-                        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }, 120);
-                    }}>Localizar lead ↘</button>
+                    {whatsapp(lead.phone)
+                      ? <WhatsAppSequenceAssistant
+                          lead={lead}
+                          whatsappUrl={whatsapp(lead.phone)}
+                          onContactConfirmed={registerLeadContact}
+                          onWhatsAppActivity={registerWhatsAppActivity}
+                          triggerLabel="Abrir assistente"
+                          triggerClassName="whatsapp-pipeline-resume"
+                        />
+                      : <span className="no-phone">Telefone inválido para WhatsApp</span>}
                     <button type="button" className="whatsapp-pipeline-archive" onClick={() => {
                       registerWhatsAppActivity(lead.id, {
                         whatsapp_tracking_status: 'archived',
