@@ -369,29 +369,33 @@ export default function ProspeccaoPage() {
 
         <section id="whatsapp-pipeline" className="whatsapp-pipeline-section">
           <div className="leads-heading">
-            <div><span className="eyebrow">ACOMPANHAMENTO DO WHATSAPP</span><h2>Conversas em andamento</h2><p>Leads cujas mensagens foram abertas pelo Escarlate e registradas automaticamente para você retomar depois.</p></div>
+            <div><span className="eyebrow">ACOMPANHAMENTO DE CONTATOS</span><h2>Conversas em andamento</h2><p>Leads com uma abordagem preparada no WhatsApp ou Instagram para você retomar depois.</p></div>
             <span className="lead-total">{activeConversations.length} em andamento</span>
           </div>
           <div className="conversation-toolbar"><label className="conversation-search"><span>⌕</span><input value={conversationQuery} onChange={(event) => setConversationQuery(event.target.value)} placeholder="Buscar conversa por nome, telefone ou empresa..." aria-label="Buscar conversas em andamento" /></label><span className="conversation-results">{visibleConversations.length} de {activeConversations.length}</span></div>
           <div className="whatsapp-pipeline-list">
             {activeConversations.length === 0
-              ? <div className="empty-crm">Nenhuma conversa iniciada ainda. Ao preparar a primeira mensagem pelo Assistente WhatsApp, a lead aparecerá aqui.</div>
+              ? <div className="empty-crm">Nenhuma conversa iniciada ainda. Ao preparar a primeira mensagem pelo Assistente WhatsApp ou Instagram, o lead aparecerá aqui.</div>
               : visibleConversations.length === 0
                 ? <div className="empty-crm">Nenhuma conversa em andamento corresponde a “{conversationQuery}”.</div>
                 : visibleConversations.map((lead) => {
                 const sent = Number(lead.whatsapp_messages_sent || 0);
                 const total = Math.max(1, Number(lead.whatsapp_total_messages || 4));
                 const percent = Math.min(100, Math.round((sent / total) * 100));
+                const isInstagramConversation = String(lead.whatsapp_last_message || '').startsWith('Instagram Direct');
+                const social = socialProfile(lead);
                 return <article className="whatsapp-pipeline-card" key={lead.id}>
                   <div className="whatsapp-pipeline-card-main">
                     <div className="lead-name-row"><h3>{lead.name}</h3><span className="stage-badge stage-contacted">Em andamento</span></div>
                     <p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p>
-                    <div className="whatsapp-pipeline-progress-label"><span>{sent} de {total} mensagens abertas no WhatsApp</span><strong>{percent}%</strong></div>
+                    <div className="whatsapp-pipeline-progress-label"><span>{isInstagramConversation ? 'Mensagem preparada no Instagram Direct' : `${sent} de ${total} mensagens abertas no WhatsApp`}</span><strong>{percent}%</strong></div>
                     <div className="whatsapp-pipeline-progress"><span style={{ width: percent + '%' }} /></div>
                     <small>{lead.whatsapp_last_message || 'Primeira abordagem preparada'}{lead.whatsapp_last_message_at ? ' · ' + new Date(lead.whatsapp_last_message_at).toLocaleString('pt-BR') : ''}</small>
                   </div>
                   <div className="whatsapp-pipeline-actions">
-                    {whatsapp(lead.phone)
+                    {isInstagramConversation && social?.label === 'Instagram'
+                      ? <InstagramAssistant lead={lead} profileUrl={social.url} onActivity={registerWhatsAppActivity} />
+                      : whatsapp(lead.phone)
                       ? <WhatsAppSequenceAssistant
                           lead={lead}
                           whatsappUrl={whatsapp(lead.phone)}
