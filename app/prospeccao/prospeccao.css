@@ -199,3 +199,12 @@
 .conversation-search input::placeholder{color:#777f91}
 .conversation-results{color:var(--crm-muted);font-size:.72rem;white-space:nowrap}
 @media(max-width:720px){.crm-sidebar .nav-item-conversations{display:flex;grid-column:1/-1;margin:12px 0 0;padding:10px 12px;background:rgba(237,64,83,.1);color:#ff8994}.conversation-toolbar{align-items:stretch}.conversation-search{max-width:none}.conversation-results{align-self:center}}
+
+
+.instagram-prepared-message{display:grid;gap:9px;margin-top:16px;padding:14px;border:1px solid rgba(238,105,180,.35);border-radius:12px;background:rgba(214,64,145,.06)}
+.instagram-prepared-message>label{color:#f0b4d4;font-size:.78rem;font-weight:800}
+.instagram-prepared-message textarea{width:100%;min-height:130px;resize:vertical;padding:12px;border:1px solid #493047;border-radius:9px;background:#0b0d13;color:#f3f4f7;font:inherit;font-size:.82rem;line-height:1.55;white-space:pre-wrap}
+.instagram-prepared-actions{display:flex;flex-wrap:wrap;gap:8px}
+.instagram-prepared-actions button{border:1px solid rgba(214,64,145,.55);border-radius:9px;padding:10px 14px;background:rgba(214,64,145,.18);color:#ff9bce;font-weight:800;cursor:pointer}
+.instagram-prepared-actions button.instagram-open-profile{border-color:var(--crm-line);background:#191c26;color:#d8dce6}
+.instagram-prepared-actions button:disabled{opacity:.6;cursor:wait}
