@@ -232,7 +232,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
   const renderedMessages = activeSequence.messages.map((message) => renderMessage(message, values));
   const currentMessage = renderedMessages[currentStep] || '';
 
-  function startConversation() {
+  async function startConversation() {
     let latestSequences = sequences;
     let latestProgress = progress;
     try {
@@ -263,6 +263,15 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
     setFeedback('');
     setScreen('buttons');
     setIsOpen(true);
+
+    // Abrir o assistente já inicia o trabalho comercial deste lead.
+    if (onContactConfirmed) {
+      try {
+        await onContactConfirmed(lead.id, 'whatsapp', 'contacted');
+      } catch (error) {
+        setFeedback(`Assistente aberto, mas não consegui classificar o lead como contatado: ${error.message}`);
+      }
+    }
   }
 
   async function openMessageButton(template) {
