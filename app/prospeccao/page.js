@@ -429,7 +429,7 @@ export default function ProspeccaoPage() {
                   </div>
                 </article>;
               })}
-          </div>}
+          </div></div>}
         </section>
 
         <section id="captura" className="capture-panel">
