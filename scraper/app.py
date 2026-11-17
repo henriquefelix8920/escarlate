@@ -5,6 +5,7 @@ import re
 import secrets
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
@@ -30,7 +31,16 @@ def require_token(authorization: str | None = Header(default=None)):
 class SearchRequest(BaseModel):
     city: str = Field(min_length=2, max_length=100)
     category: str = Field(min_length=2, max_length=100)
-    limit: int = Field(default=10, ge=1, le=15)
+    limit: int = Field(default=10, ge=1, le=50)
+    channel: Literal['whatsapp', 'instagram'] = 'whatsapp'
+
+def is_instagram_url(value: str) -> bool:
+    from urllib.parse import urlparse
+    try:
+        host = (urlparse(value if value.startswith(('http://', 'https://')) else 'https://' + value).hostname or '').lower()
+        return host == 'instagram.com' or host.endswith('.instagram.com')
+    except Exception:
+        return False
 
 def digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
@@ -67,6 +77,14 @@ def cancel_job(job_id: str):
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Could not cancel search: {str(exc)[:180]}")
 
+@app.get("/api/jobs/active", dependencies=[Depends(require_token)])
+def get_active_job():
+    try:
+        result = db().table("search_jobs").select("*").in_("status", ["queued", "running", "cancelling"]).order("created_at", desc=True).limit(1).execute()
+        return result.data[0] if result.data else {}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Could not read active search: {str(exc)[:180]}")
+
 @app.get("/api/jobs/{job_id}", dependencies=[Depends(require_token)])
 def get_job(job_id: str):
     try:
@@ -90,7 +108,7 @@ async def run_search(job_id: str, data: SearchRequest):
     progress = {
         "version": 1, "phase": "starting", "detail": "Preparando a pesquisa…",
         "scanned": 0, "candidates": 0, "with_website": 0,
-        "duplicates": 0, "errors": 0, "saved": 0,
+        "with_instagram": 0, "duplicates": 0, "errors": 0, "saved": 0,
     }
 
     def update_job(**values):
@@ -203,17 +221,26 @@ async def run_search(job_id: str, data: SearchRequest):
                             else:
                                 website = await element.get_attribute("href") or ""
 
-                    if website.strip():
+                    instagram_url = ""
+                    if data.channel == "instagram":
+                        if not is_instagram_url(website):
+                            progress["with_website"] += 1
+                            progress["scanned"] += 1
+                            report_progress(detail=f"Analisando: {name[:70]} — descartada porque não informa Instagram no campo de site.")
+                            continue
+                        instagram_url = website
+                        progress["with_instagram"] += 1
+                    elif website.strip():
                         progress["with_website"] += 1
                         progress["scanned"] += 1
-                        report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site.")
+                        report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site próprio.")
                         continue
 
                     normalized = digits(phone)
                     row = {
                         "name": name[:200], "category": data.category,
                         "phone": phone or None, "phone_normalized": normalized or None,
-                        "website": None, "address": address or None,
+                        "website": None, "instagram": instagram_url or None, "address": address or None,
                         "city": data.city, "google_maps_url": maps_url,
                         "source": "google_maps", "search_term": f"{data.category} em {data.city}",
                         "status": "new",

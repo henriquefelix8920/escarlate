@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import './prospeccao.css';
 import WhatsAppSequenceAssistant from './WhatsAppSequenceAssistant';
+import InstagramAssistant from './InstagramAssistant';
 import { getMillisecondsUntilNextSaoPauloMidnight } from '@/lib/sao-paulo-date';
 
 const stages = [
@@ -79,6 +80,7 @@ export default function ProspeccaoPage() {
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('');
   const [limit, setLimit] = useState(20);
+  const [searchChannel, setSearchChannel] = useState('whatsapp');
   const [leads, setLeads] = useState([]);
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -199,7 +201,7 @@ export default function ProspeccaoPage() {
     try {
       const response = await fetch('/api/search', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ city: capitalizeCity(city), category, limit: Number(limit) }),
+        body: JSON.stringify({ city: capitalizeCity(city), category, limit: Number(limit), channel: searchChannel }),
       });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data.detail || data.error || 'Não foi possível iniciar a captura.');
@@ -402,11 +404,15 @@ export default function ProspeccaoPage() {
 
         <section id="captura" className="capture-panel">
           <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Busque empresas locais que ainda não possuem site.</p></div><span className="capture-icon">⌕</span></div>
+          <div className="search-channel-toggle" role="group" aria-label="Tipo de busca">
+            <button type="button" className={searchChannel === 'whatsapp' ? 'is-active whatsapp' : ''} onClick={() => setSearchChannel('whatsapp')}>☎ Buscar leads com WhatsApp</button>
+            <button type="button" className={searchChannel === 'instagram' ? 'is-active instagram' : ''} onClick={() => setSearchChannel('instagram')}>◎ Buscar leads com Instagram</button>
+          </div>
           <form onSubmit={startSearch} className="prospect-form">
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
             <label>Cidade<input value={city} onChange={(e) => setCity(capitalizeCity(e.target.value))} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
-            <label className="limit-field">Meta de leads<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[20,40,60,100].map((n) => <option key={n} value={n}>{n} leads</option>)}</select></label>
-            <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '⌕ Buscar sem site'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
+            <label className="limit-field">Meta de leads<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[20,40,50].map((n) => <option key={n} value={n}>{n} leads</option>)}</select></label>
+            <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : searchChannel === 'instagram' ? '◎ Buscar perfis no Instagram' : '⌕ Buscar leads com WhatsApp'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
           <div className="shared-job-heading"><strong>ACOMPANHAMENTO DA PESQUISA</strong><span>Sincronizado automaticamente entre seus aparelhos</span></div>
           {!job && <div className="job-status job-idle"><strong>Nenhuma pesquisa registrada</strong><span>Quando uma pesquisa for iniciada em qualquer aparelho, o andamento aparecerá aqui.</span></div>}
@@ -421,13 +427,14 @@ export default function ProspeccaoPage() {
                 <span><b>{jobProgress.saved || 0}</b> leads salvos</span>
                 <span><b>{jobProgress.with_website || 0}</b> descartadas por já terem site</span>
                 <span><b>{jobProgress.with_social || 0}</b> com redes sociais (ainda sem site)</span>
+                <span><b>{jobProgress.with_instagram || 0}</b> com Instagram identificado</span>
                 <span><b>{jobProgress.duplicates || 0}</b> duplicadas</span>
                 <span><b>{jobProgress.errors || 0}</b> com erro</span>
               </div>
             </> : <span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>}
             {job.found_count !== undefined && !jobProgress && <span>{job.found_count} novos leads salvos</span>}
           </div>}
-          <p className="prospect-hint">A captura utiliza informações públicas do Google Maps. Empresas com site identificado são descartadas.</p>
+          <p className="prospect-hint">{searchChannel === 'instagram' ? 'Busca somente empresas cujo campo de site no Google Maps aponta diretamente para instagram.com. Outros sites e redes sociais são descartados.' : 'Busca empresas sem site próprio e registra telefone quando disponível. Perfis sociais não são considerados sites próprios.'}</p>
         </section>
 
         <section id="leads" className="leads-section">
@@ -441,7 +448,7 @@ export default function ProspeccaoPage() {
                 const wa = whatsapp(lead.phone);
                 const social = socialProfile(lead);
                 return <article id={'lead-' + lead.id} className="prospect-lead" key={lead.id}>
-                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (social ? 'has-social' : 'no-social')}>{social ? 'Sem site · com ' + social.label : 'Sem site · sem rede social'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa ? <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onContactConfirmed={registerLeadContact} onWhatsAppActivity={registerWhatsAppActivity} /> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (social ? 'has-social' : 'no-social')}>{social ? 'Sem site · com ' + social.label : 'Sem site · sem rede social'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa && <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onContactConfirmed={registerLeadContact} onWhatsAppActivity={registerWhatsAppActivity} />}{social?.label === 'Instagram' && <InstagramAssistant lead={lead} profileUrl={social.url} />}{!wa && social?.label !== 'Instagram' && <span className="no-phone">Nenhum canal de contato identificado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
                   <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
                 </article>;
               })
