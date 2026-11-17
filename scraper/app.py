@@ -5,6 +5,7 @@ import re
 import secrets
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
@@ -35,6 +36,7 @@ class SearchRequest(BaseModel):
     city: str = Field(min_length=2, max_length=100)
     category: str = Field(min_length=2, max_length=100)
     limit: int = Field(default=20, ge=1, le=100)
+    channel: Literal['whatsapp', 'instagram'] = 'whatsapp'
 
 def digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
@@ -143,8 +145,13 @@ async def recover_interrupted_jobs():
                 continue
 
             if not recovered:
+                try:
+                    saved_message = json.loads(row.get("message") or "{}")
+                except Exception:
+                    saved_message = {}
                 data = SearchRequest(
-                    city=row["city"], category=row["term"], limit=row["requested_limit"]
+                    city=row["city"], category=row["term"], limit=row["requested_limit"],
+                    channel=saved_message.get("channel", "whatsapp")
                 )
                 asyncio.create_task(run_search(job_id, data))
                 recovered = True
@@ -162,7 +169,7 @@ async def recover_interrupted_jobs():
 @app.post("/api/search", dependencies=[Depends(require_token)])
 async def start_search(data: SearchRequest, background: BackgroundTasks):
     job_id = str(uuid.uuid4())
-    row = {"id": job_id, "term": data.category, "city": data.city, "status": "queued", "requested_limit": data.limit, "found_count": 0}
+    row = {"id": job_id, "term": data.category, "city": data.city, "status": "queued", "requested_limit": data.limit, "found_count": 0, "message": json.dumps({"channel": data.channel})}
     try:
         client = db()
         active = client.table("search_jobs").select("*").in_(
@@ -275,7 +282,7 @@ async def _run_search(job_id: str, data: SearchRequest):
         progress = {}
     progress = {
         "version": 1, "phase": "starting", "detail": "Preparando a pesquisa…",
-        "scanned": 0, "candidates": 0, "with_website": 0, "with_social": 0,
+        "scanned": 0, "candidates": 0, "with_website": 0, "with_social": 0, "with_instagram": 0,
         "duplicates": 0, "errors": 0, "saved": int(job_row.get("found_count") or 0),
         "batch": 0, "total_batches": 0, **progress,
     }
@@ -437,6 +444,10 @@ async def _run_search(job_id: str, data: SearchRequest):
                                     website = await element.get_attribute("href") or ""
     
                         social_network, social_url = classify_social_url(website)
+                        if data.channel == "instagram" and social_network != "instagram":
+                            progress["scanned"] += 1
+                            report_progress(detail=f"Analisando: {name[:70]} — descartada porque não informa perfil do Instagram no site do Google Maps.")
+                            continue
                         if website.strip() and not social_network:
                             progress["with_website"] += 1
                             progress["scanned"] += 1
@@ -445,6 +456,8 @@ async def _run_search(job_id: str, data: SearchRequest):
 
                         if social_network:
                             progress["with_social"] += 1
+                        if social_network == "instagram":
+                            progress["with_instagram"] += 1
 
                         normalized = digits(phone)
                         row = {
