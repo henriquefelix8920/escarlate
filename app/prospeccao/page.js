@@ -418,7 +418,6 @@ export default function ProspeccaoPage() {
                       ? <WhatsAppSequenceAssistant
                           lead={lead}
                           whatsappUrl={whatsapp(lead.phone)}
-                          onContactConfirmed={registerLeadContact}
                           onWhatsAppActivity={registerWhatsAppActivity}
                           triggerLabel="Abrir assistente"
                           triggerClassName="whatsapp-pipeline-resume"
