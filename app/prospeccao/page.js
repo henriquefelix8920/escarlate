@@ -332,8 +332,13 @@ export default function ProspeccaoPage() {
     return activeConversations.filter((lead) => [lead.name, lead.phone, lead.city, lead.address, lead.category, lead.whatsapp_last_message, lead.notes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(term));
   }, [activeConversations, conversationQuery]);
 
+  const instagramUncontacted = noSite.filter((lead) => lead.status === 'new' && socialProfile(lead)?.label === 'Instagram');
+
   const visible = noSite.filter((lead) => {
-    const matchesFilter = filter === 'all' || (filter === 'pending' ? lead.status === 'new' : lead.status === filter);
+    const matchesFilter = filter === 'all'
+      || (filter === 'pending' ? lead.status === 'new' : filter === 'instagram_uncontacted'
+        ? lead.status === 'new' && socialProfile(lead)?.label === 'Instagram'
+        : lead.status === filter);
     const text = [lead.name, lead.phone, lead.city, lead.address, lead.category, lead.instagram, lead.profile].filter(Boolean).join(' ').toLowerCase();
     return matchesFilter && text.includes(query.toLowerCase());
   });
@@ -470,7 +475,7 @@ export default function ProspeccaoPage() {
         <section id="leads" className="leads-section">
           <div className="leads-heading"><div><span className="eyebrow">SEU FUNIL COMERCIAL</span><h2>Leads sem site</h2><p>Empresas que podem precisar de um site profissional.</p></div><span className="lead-total">{visible.length} exibidos</span></div>
           <div className="lead-toolbar"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="⌕  Buscar por empresa, telefone ou cidade..." /><div className="lead-filters">
-            {[['all','Todos'],['pending','Novos'],['contacted','Contatados'],['follow_up','Follow-up'],['interested','Interessados'],['proposal','Propostas'],['won','Fechados'],['lost','Perdidos']].map(([value,label]) => <button key={value} className={filter === value ? 'filter-active' : ''} onClick={() => setFilter(value)}>{label}</button>)}
+            {[['all','Todos'],['pending','Novos'],['instagram_uncontacted',`Instagram sem contato (${instagramUncontacted.length})`],['contacted','Contatados'],['follow_up','Follow-up'],['interested','Interessados'],['proposal','Propostas'],['won','Fechados'],['lost','Perdidos']].map(([value,label]) => <button key={value} className={filter === value ? 'filter-active' : ''} onClick={() => setFilter(value)}>{label}</button>)}
           </div></div>
           <div className="lead-list">
             {visible.length === 0 ? <div className="empty-crm">{noSite.length ? 'Nenhum lead corresponde a esse filtro.' : 'Ainda não há leads sem site. Faça uma pesquisa acima para encontrar oportunidades.'}</div> :
