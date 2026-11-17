@@ -160,3 +160,20 @@
 .whatsapp-pipeline-resume{flex:0 0 auto;border:1px solid rgba(53,201,139,.4);border-radius:9px;padding:9px 12px;background:rgba(53,201,139,.1);color:#8be5b8;font-size:.72rem;font-weight:750;cursor:pointer}
 .whatsapp-pipeline-resume:hover{background:rgba(53,201,139,.18)}
 @media(max-width:600px){.whatsapp-pipeline-section{padding:16px}.whatsapp-pipeline-card{align-items:flex-start;flex-direction:column}.whatsapp-pipeline-resume{width:100%}}
+
+
+/* Biblioteca de botões de mensagens comerciais */
+.wa-message-buttons-screen{padding-top:16px}
+.wa-message-button-list{display:grid;gap:9px}
+.wa-message-button-card{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 14px;background:#0d1017;border:1px solid #2c3140;border-radius:11px}
+.wa-message-button-copy{display:grid;gap:4px;min-width:0}
+.wa-message-button-number{color:#83dcb0;font-size:.61rem;font-weight:850;letter-spacing:.12em}
+.wa-message-button-copy strong{color:#f0f2f7;font-size:.82rem}
+.wa-message-button-copy p{margin:0;color:#929bad;font-size:.69rem;line-height:1.45}
+.wa-message-button-card .wa-sequence-primary{flex:0 0 auto;white-space:nowrap}
+.wa-message-pending-confirm{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding:14px;background:rgba(53,201,139,.08);border:1px solid rgba(53,201,139,.32);border-radius:11px}
+.wa-message-pending-confirm>div{min-width:0}
+.wa-message-pending-confirm strong{font-size:.78rem;color:#a5ebc7}
+.wa-message-pending-confirm p{margin:5px 0 0;color:#9aa4b5;font-size:.68rem;line-height:1.45}
+.wa-message-pending-confirm button{flex:0 0 auto;white-space:nowrap}
+@media(max-width:600px){.wa-message-button-card,.wa-message-pending-confirm{align-items:stretch;flex-direction:column}.wa-message-button-card .wa-sequence-primary,.wa-message-pending-confirm button{width:100%}}
