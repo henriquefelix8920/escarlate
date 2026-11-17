@@ -7,10 +7,10 @@ const categories = [...new Set(WHATSAPP_MESSAGE_BUTTONS.map((item) => item.categ
 
 function contactValues(lead) {
   const raw = String(lead?.name || '').trim();
-  const cleaned = raw.replace(/^(dra?\.?|nutricionista|clínica|consultório)\s+/i, '').split(/[|–—,]/)[0].trim();
+  const cleaned = raw.replace(/^(dra?\\.?|nutricionista|clínica|consultório)\\s+/i, '').split(/[|–—,]/)[0].trim();
   return {
     nome: cleaned || raw,
-    primeiro_nome: (cleaned || raw).split(/\s+/)[0] || '',
+    primeiro_nome: (cleaned || raw).split(/\\s+/)[0] || '',
     tratamento: '',
     cidade: lead?.city || '',
     categoria: lead?.category || '',
@@ -19,32 +19,71 @@ function contactValues(lead) {
 }
 
 function renderMessage(template, values) {
-  return String(template || '').replace(/\{([a-z_]+)\}/gi, (_, key) => values[key] ?? '').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  return String(template || '').replace(/\\{([a-z_]+)\\}/gi, (_, key) => values[key] ?? '').replace(/[ \\t]{2,}/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();
+}
+
+async function copyText(text, textareaRef) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Usa a alternativa compatível com navegadores que bloqueiam a Clipboard API.
+  }
+
+  const textarea = textareaRef.current;
+  if (!textarea) return false;
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  try {
+    return Boolean(document.execCommand('copy'));
+  } catch {
+    return false;
+  }
 }
 
 export default function InstagramAssistant({ lead, profileUrl }) {
   const [isOpen, setIsOpen] = useState(false);
   const [category, setCategory] = useState(categories[0] || '');
   const [feedback, setFeedback] = useState('');
+  const [preparedMessage, setPreparedMessage] = useState('');
+  const [copying, setCopying] = useState(false);
+  const textareaRef = useMemo(() => ({ current: null }), []);
   const values = useMemo(() => contactValues(lead), [lead]);
   const messages = WHATSAPP_MESSAGE_BUTTONS.filter((item) => item.category === category);
 
   async function prepareMessage(item) {
     const text = renderMessage(item.message, values);
-    const profileWindow = window.open(profileUrl, '_blank');
-    if (profileWindow) profileWindow.opener = null;
-    try {
-      await navigator.clipboard.writeText(text);
-      setFeedback('Mensagem copiada! O perfil foi aberto em outra aba. Entre no Direct, cole, revise e envie manualmente.');
-    } catch {
-      setFeedback('O perfil foi aberto. Não consegui copiar automaticamente; copie o texto manualmente.');
-    }
-    if (!profileWindow) setFeedback((current) => current + ' O navegador bloqueou a nova aba; permita pop-ups.');
+    setPreparedMessage(text);
+    setFeedback('Mensagem preparada. Se a cópia automática não funcionar, use o botão Copiar mensagem abaixo.');
+    // Inicia a cópia enquanto o clique ainda tem permissão do navegador.
+    const copyPromise = navigator.clipboard?.writeText
+      ? navigator.clipboard.writeText(text).then(() => true).catch(() => false)
+      : Promise.resolve(false);
+    const profileWindow = window.open(profileUrl, '_blank', 'noopener,noreferrer');
+    setCopying(true);
+    const copied = await copyPromise;
+    setCopying(false);
+    if (copied) setFeedback('Mensagem copiada! O perfil foi aberto em outra aba. Entre no Direct, cole, revise e envie manualmente.');
+    else setFeedback('O perfil foi aberto. O navegador bloqueou a cópia automática; volte a esta aba e clique em Copiar mensagem.');
+    if (!profileWindow) setFeedback((current) => current + ' Se o perfil não abriu, permita pop-ups ou use Abrir perfil.');
+  }
+
+  async function copyPreparedMessage() {
+    if (!preparedMessage) return;
+    setCopying(true);
+    const copied = await copyText(preparedMessage, textareaRef);
+    setCopying(false);
+    setFeedback(copied
+      ? 'Mensagem copiada! Volte ao Instagram, abra o Direct e cole a mensagem.'
+      : 'Não consegui copiar automaticamente. O texto está selecionado abaixo: use Ctrl+C (ou toque em Copiar no seu dispositivo).');
   }
 
   return (
     <>
-      <button type="button" className="instagram-assistant-action" onClick={() => { setIsOpen(true); setFeedback(''); }}>
+      <button type="button" className="instagram-assistant-action" onClick={() => { setIsOpen(true); setFeedback(''); setPreparedMessage(''); }}>
         <span className="instagram-assistant-icon" aria-hidden="true">◎</span>
         <span className="instagram-assistant-copy"><strong>Assistente Instagram</strong><small>Preparar mensagem para Direct</small></span>
       </button>
@@ -55,7 +94,7 @@ export default function InstagramAssistant({ lead, profileUrl }) {
             <span className="eyebrow">ASSISTENTE DE ABORDAGEM</span>
             <h2 id="instagram-assistant-title">Instagram Direct</h2>
             <p>Lead: <strong>{lead.name}</strong></p>
-            <p className="instagram-assistant-note">Escolha uma mensagem. O Escarlate abrirá o perfil e copiará o texto. Depois, você inicia o Direct, cola, revisa e envia manualmente. O perfil pode limitar mensagens de pessoas que ainda não seguem a conta.</p>
+            <p className="instagram-assistant-note">Escolha uma mensagem. O Escarlate tentará copiá-la e abrirá o perfil em outra aba. Se a cópia automática for bloqueada, use o botão Copiar mensagem. Depois, entre no Direct, cole, revise e envie manualmente.</p>
             <label className="wa-sequence-toolbar">Categoria de mensagens
               <select value={category} onChange={(event) => setCategory(event.target.value)}>
                 {categories.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -65,10 +104,20 @@ export default function InstagramAssistant({ lead, profileUrl }) {
               {messages.map((item) => (
                 <article className="instagram-message-item" key={item.id}>
                   <div><strong>{item.id} · {item.title}</strong><p>{item.description}</p></div>
-                  <button type="button" onClick={() => prepareMessage(item)}>Abrir perfil + copiar</button>
+                  <button type="button" onClick={() => prepareMessage(item)}>Abrir perfil + preparar mensagem</button>
                 </article>
               ))}
             </div>
+            {preparedMessage && (
+              <div className="instagram-prepared-message">
+                <label htmlFor="instagram-prepared-text">Mensagem pronta para enviar</label>
+                <textarea id="instagram-prepared-text" ref={(element) => { textareaRef.current = element; }} value={preparedMessage} readOnly rows={6} onFocus={(event) => event.target.select()} />
+                <div className="instagram-prepared-actions">
+                  <button type="button" onClick={copyPreparedMessage} disabled={copying}>{copying ? 'Copiando…' : 'Copiar mensagem'}</button>
+                  <button type="button" className="instagram-open-profile" onClick={() => window.open(profileUrl, '_blank', 'noopener,noreferrer')}>Abrir perfil</button>
+                </div>
+              </div>
+            )}
             {feedback && <div className="instagram-assistant-feedback" role="status">{feedback}</div>}
           </section>
         </div>
