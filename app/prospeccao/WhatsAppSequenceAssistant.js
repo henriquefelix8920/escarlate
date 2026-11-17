@@ -306,7 +306,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
           whatsapp_last_message_at: new Date().toISOString(),
         });
       }
-      if (onContactConfirmed) await onContactConfirmed(lead.id, 'whatsapp');
+      if (onContactConfirmed) await onContactConfirmed(lead.id, 'whatsapp', lead.status === 'new' ? 'contacted' : null);
       setPendingButton(null);
       setFeedback('Envio confirmado e progresso atualizado no painel de conversas em andamento.');
     } catch (error) {
