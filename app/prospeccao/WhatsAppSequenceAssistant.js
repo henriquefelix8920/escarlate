@@ -5,15 +5,13 @@ import { WHATSAPP_MESSAGE_BUTTONS, WHATSAPP_MESSAGE_CATEGORIES } from './whatsap
 
 const SEQUENCES_KEY = 'escarlate:whatsapp-sequences:v1';
 const PROGRESS_KEY = 'escarlate:whatsapp-sequence-progress:v1';
-const SAMPLE_WEBSITE_URL = '';
-
 const DEFAULT_SEQUENCE = {
   id: 'medicas-primeira-abordagem',
   name: 'Médicas e consultórios — primeira abordagem',
   messages: [
     'Olá, {tratamento} {primeiro_nome}!\nEspero que esteja tudo bem com você 🙏',
-    'Meu nome é Henrique, sou desenvolvedor web e trabalho com criação de sites profissionais para empresas e profissionais que desejam fortalecer sua presença digital.',
-    'Estava pesquisando profissionais da sua região no Google e encontrei seu perfil.\nPercebi que você ainda não possui um site próprio.\nHoje, muitas pessoas pesquisam no Google antes de escolher um profissional.',
+    'Meu nome é Henrique, sou desenvolvedor web e trabalho com criação de sites profissionais para médicas e consultórios que desejam fortalecer sua presença digital.',
+    'Estava pesquisando médicas e consultórios da sua região no Google e encontrei seu perfil.\nNão encontrei um site próprio associado ao seu perfil.\nHoje, muitas pessoas pesquisam no Google antes de escolher um profissional de saúde.',
     'Ter um site pode ajudar a apresentar seus serviços, transmitir mais confiança e facilitar o contato de novos pacientes.\nEu tenho um site de demonstração para nutricionistas.\nPosso te mostrar?',
   ],
 };
@@ -174,9 +172,11 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onWhatsAp
       if (savedSequences) {
         const parsed = JSON.parse(savedSequences);
         const valid = Array.isArray(parsed)
-          ? parsed.filter((item) => item && item.id && item.name && Array.isArray(item.messages) && item.messages.length).map(migrateDefaultSequence)
+          ? parsed.filter((item) => item && item.id && item.name && Array.isArray(item.messages) && item.messages.length)
+            .map((item) => item.id === 'nutricionistas-primeira-abordagem' ? DEFAULT_SEQUENCE : migrateDefaultSequence(item))
           : [];
-        if (valid.length) setSequences(valid);
+        if (!valid.some((item) => item.id === DEFAULT_SEQUENCE.id)) valid.unshift(DEFAULT_SEQUENCE);
+        setSequences(valid);
       }
       const savedProgress = window.localStorage.getItem(PROGRESS_KEY);
       if (savedProgress) {
@@ -247,9 +247,11 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onWhatsAp
       if (savedSequences) {
         const parsed = JSON.parse(savedSequences);
         const valid = Array.isArray(parsed)
-          ? parsed.filter((item) => item && item.id && item.name && Array.isArray(item.messages) && item.messages.length).map(migrateDefaultSequence)
+          ? parsed.filter((item) => item && item.id && item.name && Array.isArray(item.messages) && item.messages.length)
+            .map((item) => item.id === 'nutricionistas-primeira-abordagem' ? DEFAULT_SEQUENCE : migrateDefaultSequence(item))
           : [];
-        if (valid.length) latestSequences = valid;
+        if (!valid.some((item) => item.id === DEFAULT_SEQUENCE.id)) valid.unshift(DEFAULT_SEQUENCE);
+        latestSequences = valid;
       }
       const savedProgress = window.localStorage.getItem(PROGRESS_KEY);
       if (savedProgress) {
@@ -334,13 +336,11 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onWhatsAp
     const greeting = greetingName ? `Perfeito, ${greetingName}! 😊` : 'Perfeito! 😊';
     const message = `${greeting}
 
-Separei uma demonstração para você visualizar como poderia ficar o seu site profissional:
+Posso te apresentar uma referência visual de site profissional para médicas e consultórios.
 
-${SAMPLE_WEBSITE_URL}
+A ideia é desenvolver algo sob medida para você, com identidade visual própria, apresentação profissional, especialidades, informações de atendimento e formas práticas para pacientes entrarem em contato ou solicitarem um agendamento.
 
-Esse link é uma referência visual. O seu site seria desenvolvido sob medida para você, com uma identidade visual alinhada ao seu estilo: paleta de cores, suas informações, especialidades e serviços, fotos, apresentação profissional e formas práticas para novos pacientes entrarem em contato ou agendarem.
-
-A ideia é criar um site com a sua identidade, que valorize o seu trabalho e transmita confiança desde o primeiro acesso. Dê uma olhadinha e me conte o que achou! 😊`;
+O objetivo é valorizar seu trabalho e organizar as informações em um espaço digital que seja seu. Se quiser, te mostro uma ideia visual sem compromisso. 😊`;
 
     // Abre uma aba vazia de forma síncrona para evitar o bloqueio de pop-ups
     // sem alterar a etapa comercial; ela será atualizada manualmente no funil.
