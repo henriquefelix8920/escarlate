@@ -13,25 +13,46 @@ const stages = [
 const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(Number(value || 0));
 const digits = (value) => String(value || '').replace(/\D/g, '');
 
-const socialProfile = (lead) => {
-  const url = String(lead.instagram || lead.profile || '').trim();
+const SOCIAL_PROFILE_LABELS = [
+  ['instagram.com', 'Instagram'], ['facebook.com', 'Facebook'], ['fb.com', 'Facebook'],
+  ['tiktok.com', 'TikTok'], ['linkedin.com', 'LinkedIn'], ['youtube.com', 'YouTube'],
+  ['youtu.be', 'YouTube'], ['x.com', 'X'], ['twitter.com', 'X'],
+  ['threads.net', 'Threads'], ['twitch.tv', 'Twitch'], ['discord.com', 'Discord'], ['discord.gg', 'Discord'],
+  ['reddit.com', 'Reddit'], ['tumblr.com', 'Tumblr'], ['medium.com', 'Medium'], ['bsky.app', 'Bluesky'],
+  ['mastodon.social', 'Mastodon'], ['vimeo.com', 'Vimeo'], ['soundcloud.com', 'SoundCloud'],
+  ['t.me', 'Telegram'], ['telegram.org', 'Telegram'], ['pinterest.com', 'Pinterest'], ['snapchat.com', 'Snapchat'],
+  ['kwai.com', 'Kwai'], ['whatsapp.com', 'WhatsApp'], ['wa.me', 'WhatsApp'],
+  ['linktr.ee', 'Link na bio'], ['beacons.ai', 'Link na bio'], ['bio.site', 'Link na bio'],
+  ['solo.to', 'Link na bio'], ['msha.ke', 'Link na bio'], ['campsite.bio', 'Link na bio'],
+];
+
+const socialLabelForUrl = (value) => {
+  const url = String(value || '').trim();
   if (!url) return null;
   let host = '';
-  try { host = new URL(url.startsWith('http') ? url : 'https://' + url).hostname.toLowerCase().replace(/^www\./, ''); } catch {}
-  const labels = [
-    ['instagram.com', 'Instagram'], ['facebook.com', 'Facebook'], ['fb.com', 'Facebook'],
-    ['tiktok.com', 'TikTok'], ['linkedin.com', 'LinkedIn'], ['youtube.com', 'YouTube'],
-    ['youtu.be', 'YouTube'], ['x.com', 'X'], ['twitter.com', 'X'],
-    ['threads.net', 'Threads'], ['twitch.tv', 'Twitch'], ['discord.com', 'Discord'], ['discord.gg', 'Discord'],
-    ['reddit.com', 'Reddit'], ['tumblr.com', 'Tumblr'], ['medium.com', 'Medium'], ['bsky.app', 'Bluesky'],
-    ['mastodon.social', 'Mastodon'], ['vimeo.com', 'Vimeo'], ['soundcloud.com', 'SoundCloud'], ['t.me', 'Telegram'], ['telegram.org', 'Telegram'], ['pinterest.com', 'Pinterest'], ['snapchat.com', 'Snapchat'],
-    ['kwai.com', 'Kwai'], ['whatsapp.com', 'WhatsApp'], ['wa.me', 'WhatsApp'],
-    ['linktr.ee', 'Link na bio'], ['beacons.ai', 'Link na bio'], ['bio.site', 'Link na bio'],
-    ['solo.to', 'Link na bio'], ['msha.ke', 'Link na bio'], ['campsite.bio', 'Link na bio'],
-  ];
-  const match = labels.find(([domain]) => host === domain || host.endsWith('.' + domain));
-  return { url: url.startsWith('http') ? url : 'https://' + url, label: match?.[1] || 'Perfil social' };
+  try {
+    host = new URL(url.startsWith('http') ? url : 'https://' + url)
+      .hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+  return SOCIAL_PROFILE_LABELS.find(([domain]) => host === domain || host.endsWith('.' + domain))?.[1] || null;
 };
+
+const socialProfile = (lead) => {
+  const explicitUrl = String(lead.instagram || lead.profile || '').trim();
+  const websiteUrl = String(lead.website || '').trim();
+  // O Google Maps às vezes preenche o campo "site" com Instagram, WhatsApp
+  // ou um agregador de links. Isso não é um site próprio e deve ficar na fila.
+  const url = explicitUrl || (socialLabelForUrl(websiteUrl) ? websiteUrl : '');
+  if (!url) return null;
+  return {
+    url: url.startsWith('http') ? url : 'https://' + url,
+    label: socialLabelForUrl(url) || 'Perfil social',
+  };
+};
+
+const isSocialWebsite = (value) => Boolean(socialLabelForUrl(value));
 async function readJson(response) {
   const text = await response.text();
   if (!text.trim()) throw new Error(`O servidor retornou uma resposta vazia (HTTP ${response.status}). Tente novamente.`);
@@ -255,9 +276,10 @@ export default function ProspeccaoPage() {
     }
   }
 
-  const noSite = useMemo(() => leads.filter((lead) => !String(lead.website || '').trim()), [leads]);
+  const noSite = useMemo(() => leads.filter((lead) => !String(lead.website || '').trim() || isSocialWebsite(lead.website)), [leads]);
   const stats = useMemo(() => ({
     noSite: noSite.length,
+    notContacted: noSite.filter((lead) => lead.status === 'new').length,
     contacted: noSite.filter((lead) => ['contacted','follow_up','interested','proposal','won'].includes(lead.status)).length,
     proposals: noSite.filter((lead) => lead.status === 'proposal').length,
     won: leads.filter((lead) => lead.status === 'won').length,
@@ -307,7 +329,8 @@ export default function ProspeccaoPage() {
             <article className="finance-card revenue-card"><span>Faturamento fechado</span><strong>{money(stats.revenue)}</strong><small>{stats.won} negócio(s) marcado(s) como fechado(s)</small><div className="finance-symbol">↗</div></article>
             <article className="finance-card"><span>Em negociação</span><strong>{money(stats.pipeline)}</strong><small>Valor informado em interessados e propostas</small><div className="finance-symbol">◎</div></article>
             <article className="finance-card"><span>Propostas enviadas</span><strong>{stats.proposals}</strong><small>Oportunidades aguardando retorno</small><div className="finance-symbol">▤</div></article>
-            <article className="finance-card"><span>Leads sem site</span><strong>{stats.noSite}</strong><small>{stats.contacted} já trabalhados no funil</small><div className="finance-symbol">◉</div></article>
+            <article className="finance-card uncontacted-card"><span>Ainda não contatados</span><strong>{stats.notContacted}</strong><small>Na etapa Novo · aguardando primeira abordagem</small><div className="finance-symbol">◌</div></article>
+            <article className="finance-card"><span>Leads sem site</span><strong>{stats.noSite}</strong><small>{stats.notContacted} ainda não contatados · {stats.contacted} já trabalhados</small><div className="finance-symbol">◉</div></article>
           </div>
           <p className="finance-note">O faturamento considera apenas leads com etapa “Fechado” e valor preenchido. Registre o valor em cada oportunidade para manter o painel atualizado.</p>
         </section>
@@ -353,7 +376,7 @@ export default function ProspeccaoPage() {
                 const wa = whatsapp(lead.phone);
                 const social = socialProfile(lead);
                 return <article className="prospect-lead" key={lead.id}>
-                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa ? <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onContactConfirmed={registerLeadContact} /> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (social ? 'has-social' : 'no-social')}>{social ? 'Sem site · com ' + social.label : 'Sem site · sem rede social'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa ? <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onContactConfirmed={registerLeadContact} /> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
                   <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
                 </article>;
               })
