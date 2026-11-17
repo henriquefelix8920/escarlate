@@ -368,8 +368,12 @@ export default function ProspeccaoPage() {
                     <small>{lead.whatsapp_last_message || 'Primeira abordagem preparada'}{lead.whatsapp_last_message_at ? ' · ' + new Date(lead.whatsapp_last_message_at).toLocaleString('pt-BR') : ''}</small>
                   </div>
                   <button type="button" className="whatsapp-pipeline-resume" onClick={() => {
-                    const target = document.getElementById('lead-' + lead.id);
-                    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setFilter('all');
+                    setQuery('');
+                    window.setTimeout(() => {
+                      const target = document.getElementById('lead-' + lead.id);
+                      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 120);
                   }}>Localizar lead ↘</button>
                 </article>;
               })}
