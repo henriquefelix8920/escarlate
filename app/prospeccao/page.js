@@ -349,7 +349,7 @@ export default function ProspeccaoPage() {
 
         <section id="whatsapp-pipeline" className="whatsapp-pipeline-section">
           <div className="leads-heading">
-            <div><span className="eyebrow">ACOMPANHAMENTO DO WHATSAPP</span><h2>Conversas em andamento</h2><p>Leads que você já abordou e pode retomar sem precisar pesquisar novamente.</p></div>
+            <div><span className="eyebrow">ACOMPANHAMENTO DO WHATSAPP</span><h2>Conversas em andamento</h2><p>Leads cujas mensagens foram abertas pelo Escarlate e registradas automaticamente para você retomar depois.</p></div>
             <span className="lead-total">{leads.filter((lead) => lead.whatsapp_tracking_status === 'active').length} em andamento</span>
           </div>
           <div className="whatsapp-pipeline-list">
@@ -363,7 +363,7 @@ export default function ProspeccaoPage() {
                   <div className="whatsapp-pipeline-card-main">
                     <div className="lead-name-row"><h3>{lead.name}</h3><span className="stage-badge stage-contacted">Em andamento</span></div>
                     <p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p>
-                    <div className="whatsapp-pipeline-progress-label"><span>{sent} de {total} mensagens confirmadas</span><strong>{percent}%</strong></div>
+                    <div className="whatsapp-pipeline-progress-label"><span>{sent} de {total} mensagens abertas no WhatsApp</span><strong>{percent}%</strong></div>
                     <div className="whatsapp-pipeline-progress"><span style={{ width: percent + '%' }} /></div>
                     <small>{lead.whatsapp_last_message || 'Primeira abordagem preparada'}{lead.whatsapp_last_message_at ? ' · ' + new Date(lead.whatsapp_last_message_at).toLocaleString('pt-BR') : ''}</small>
                   </div>
