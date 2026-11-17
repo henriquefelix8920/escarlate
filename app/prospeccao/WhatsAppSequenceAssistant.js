@@ -12,7 +12,7 @@ const DEFAULT_SEQUENCE = {
     'Olá, {tratamento} {primeiro_nome}!\nEspero que esteja tudo bem com você 🙏',
     'Meu nome é Henrique, sou desenvolvedor web e trabalho com criação de sites profissionais para médicas e consultórios que desejam fortalecer sua presença digital.',
     'Estava pesquisando médicas e consultórios da sua região no Google e encontrei seu perfil.\nNão encontrei um site próprio associado ao seu perfil.\nHoje, muitas pessoas pesquisam no Google antes de escolher um profissional de saúde.',
-    'Ter um site pode ajudar a apresentar seus serviços, transmitir mais confiança e facilitar o contato de novos pacientes.\nEu tenho um site de demonstração para nutricionistas.\nPosso te mostrar?',
+    'Ter um site pode ajudar a apresentar suas especialidades, informações de atendimento e facilitar o contato de novos pacientes.\nTenho uma referência visual pensada para médicas e consultórios.\nPosso te mostrar?',
   ],
 };
 
