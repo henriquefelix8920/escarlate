@@ -208,3 +208,13 @@
 .instagram-prepared-actions button{border:1px solid rgba(214,64,145,.55);border-radius:9px;padding:10px 14px;background:rgba(214,64,145,.18);color:#ff9bce;font-weight:800;cursor:pointer}
 .instagram-prepared-actions button.instagram-open-profile{border-color:var(--crm-line);background:#191c26;color:#d8dce6}
 .instagram-prepared-actions button:disabled{opacity:.6;cursor:wait}
+
+/* Aba recolhível de conversas em andamento */
+.conversation-tab-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.conversation-tab-heading .leads-heading{flex:1;min-width:0;margin:0}
+.conversation-tab-toggle{display:inline-flex;align-items:center;justify-content:center;gap:10px;flex:0 0 auto;min-height:42px;padding:0 15px;border:1px solid rgba(53,201,139,.38);border-radius:10px;background:rgba(53,201,139,.09);color:#8be5b8;font:inherit;font-size:.76rem;font-weight:800;cursor:pointer;transition:background .18s ease,border-color .18s ease}
+.conversation-tab-toggle:hover{background:rgba(53,201,139,.16);border-color:rgba(53,201,139,.62)}
+.conversation-tab-chevron{display:inline-block;font-size:1.15rem;line-height:1;transition:transform .18s ease}
+.conversation-tab-chevron.is-expanded{transform:rotate(180deg)}
+.conversation-tab-content{margin-top:17px}
+@media(max-width:720px){.conversation-tab-heading{align-items:stretch;flex-direction:column}.conversation-tab-toggle{width:100%}}
