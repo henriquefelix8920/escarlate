@@ -11,7 +11,7 @@ const DEFAULT_SEQUENCE = {
   id: 'nutricionistas-primeira-abordagem',
   name: 'Nutricionistas — primeira abordagem',
   messages: [
-    'Olá, {tratamento} {nome}!\nEspero que esteja tudo bem com você 🙏',
+    'Olá, {tratamento} {primeiro_nome}!\nEspero que esteja tudo bem com você 🙏',
     'Meu nome é Henrique, sou desenvolvedor web e trabalho com criação de sites profissionais para empresas e profissionais que desejam fortalecer sua presença digital.',
     'Estava pesquisando profissionais da sua região no Google e encontrei seu perfil.\nPercebi que você ainda não possui um site próprio.\nHoje, muitas pessoas pesquisam no Google antes de escolher um profissional.',
     'Ter um site pode ajudar a apresentar seus serviços, transmitir mais confiança e facilitar o contato de novos pacientes.\nEu tenho um site de demonstração para nutricionistas.\nPosso te mostrar?',
