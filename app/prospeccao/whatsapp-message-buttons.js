@@ -25,7 +25,7 @@ export const WHATSAPP_MESSAGE_BUTTONS = [
     category: 'Primeiro contato',
     title: 'Apresentar demonstração',
     description: 'Quando ela autorizar você a mostrar o exemplo.',
-    message: 'Que bom, {primeiro_nome}! 😊\n\nPreparei uma demonstração de site pensada especialmente para profissionais da medicina.\n\nDá uma olhadinha:\n\nhttps://médica-fawn.vercel.app/\n\nImagine uma estrutura assim, mas totalmente personalizada com sua identidade visual, suas informações, especialidades, serviços, fotos e canais de contato.\n\nA ideia é ter um espaço profissional próprio na internet, onde as pessoas possam conhecer melhor seu trabalho.\n\nO que achou da proposta visual?',
+    message: 'Que bom, {primeiro_nome}! 😊\n\nPosso te apresentar uma referência visual de site pensada para médicas e consultórios.\n\nA estrutura seria personalizada com sua identidade visual, suas informações profissionais, especialidades, serviços, fotos e canais de contato.\n\nA ideia é ter um espaço profissional próprio na internet, onde pacientes possam conhecer melhor seu trabalho.\n\nSe quiser, te envio a referência para você avaliar. O que acha?',
   },
   {
     id: '04',
