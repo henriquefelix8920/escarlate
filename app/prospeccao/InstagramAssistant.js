@@ -44,7 +44,7 @@ async function copyText(text, textareaRef) {
   }
 }
 
-export default function InstagramAssistant({ lead, profileUrl, onActivity }) {
+export default function InstagramAssistant({ lead, profileUrl, onActivity, onOpen }) {
   const [isOpen, setIsOpen] = useState(false);
   const [category, setCategory] = useState(categories[0] || '');
   const [feedback, setFeedback] = useState('');
@@ -101,7 +101,18 @@ export default function InstagramAssistant({ lead, profileUrl, onActivity }) {
 
   return (
     <>
-      <button type="button" className="instagram-assistant-action" onClick={() => { setIsOpen(true); setFeedback(''); setPreparedMessage(''); }}>
+      <button type="button" className="instagram-assistant-action" onClick={() => {
+        setIsOpen(true);
+        setFeedback('Registrando lead como contatado…');
+        setPreparedMessage('');
+        if (onOpen) {
+          Promise.resolve(onOpen()).then(() => {
+            setFeedback('Lead marcado como contatado. Agora escolha uma mensagem para preparar o Direct.');
+          }).catch((error) => {
+            setFeedback('Não consegui marcar o lead como contatado: ' + error.message);
+          });
+        }
+      }}>
         <span className="instagram-assistant-icon" aria-hidden="true">◎</span>
         <span className="instagram-assistant-copy"><strong>Assistente Instagram</strong><small>Preparar mensagem para Direct</small></span>
       </button>

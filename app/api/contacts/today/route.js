@@ -30,7 +30,7 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const leadId = String(body.lead_id || '').trim();
-    const channel = body.channel === 'manual' ? 'manual' : 'whatsapp';
+    const channel = ['manual', 'whatsapp', 'instagram'].includes(body.channel) ? body.channel : 'whatsapp';
 
     if (!UUID_PATTERN.test(leadId)) {
       return NextResponse.json({ error: 'Informe um lead válido para registrar o contato.' }, { status: 400 });
