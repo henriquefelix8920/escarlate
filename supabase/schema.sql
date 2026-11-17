@@ -20,12 +20,25 @@ create table if not exists public.leads (
     check (status in ('new','contacted','interested','proposal','won','lost')),
   notes text not null default '',
   deal_value numeric(12,2) not null default 0,
+  whatsapp_tracking_status text not null default 'inactive' check (whatsapp_tracking_status in ('inactive','active','completed','archived')),
+  whatsapp_messages_sent integer not null default 0 check (whatsapp_messages_sent >= 0),
+  whatsapp_total_messages integer not null default 4 check (whatsapp_total_messages >= 0),
+  whatsapp_last_message text,
+  whatsapp_last_message_at timestamptz,
+  whatsapp_started_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 -- Atualiza instalações existentes sem apagar dados.
 alter table public.leads add column if not exists deal_value numeric(12,2) not null default 0;
+alter table public.leads add column if not exists whatsapp_tracking_status text not null default 'inactive';
+alter table public.leads add column if not exists whatsapp_messages_sent integer not null default 0;
+alter table public.leads add column if not exists whatsapp_total_messages integer not null default 4;
+alter table public.leads add column if not exists whatsapp_last_message text;
+alter table public.leads add column if not exists whatsapp_last_message_at timestamptz;
+alter table public.leads add column if not exists whatsapp_started_at timestamptz;
+create index if not exists leads_whatsapp_tracking_idx on public.leads (whatsapp_tracking_status, whatsapp_last_message_at desc) where whatsapp_tracking_status = 'active';
 
 create unique index if not exists leads_phone_normalized_unique
   on public.leads(phone_normalized) where phone_normalized is not null and phone_normalized <> '';

@@ -215,6 +215,18 @@ export default function ProspeccaoPage() {
     } catch (err) { setError(err.message); }
   }
 
+  const registerWhatsAppActivity = useCallback(async (leadId, activity) => {
+    const response = await fetch('/api/leads/' + encodeURIComponent(leadId), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(activity),
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw new Error(data.error || 'Não foi possível atualizar o acompanhamento do WhatsApp.');
+    setLeads((old) => old.map((lead) => lead.id === leadId ? data.lead : lead));
+    return data.lead;
+  }, []);
+
   const registerLeadContact = useCallback(async (leadId, channel = 'whatsapp', nextStatus = null) => {
     if (nextStatus) {
       const stageResponse = await fetch('/api/leads/' + encodeURIComponent(leadId), {
@@ -335,6 +347,48 @@ export default function ProspeccaoPage() {
           <p className="finance-note">O faturamento considera apenas leads com etapa “Fechado” e valor preenchido. Registre o valor em cada oportunidade para manter o painel atualizado.</p>
         </section>
 
+        <section id="whatsapp-pipeline" className="whatsapp-pipeline-section">
+          <div className="leads-heading">
+            <div><span className="eyebrow">ACOMPANHAMENTO DO WHATSAPP</span><h2>Conversas em andamento</h2><p>Leads que você já abordou e pode retomar sem precisar pesquisar novamente.</p></div>
+            <span className="lead-total">{leads.filter((lead) => lead.whatsapp_tracking_status === 'active').length} em andamento</span>
+          </div>
+          <div className="whatsapp-pipeline-list">
+            {leads.filter((lead) => lead.whatsapp_tracking_status === 'active' && !['won', 'lost'].includes(lead.status)).length === 0
+              ? <div className="empty-crm">Nenhuma conversa iniciada ainda. Ao preparar a primeira mensagem pelo Assistente WhatsApp, a lead aparecerá aqui.</div>
+              : leads.filter((lead) => lead.whatsapp_tracking_status === 'active' && !['won', 'lost'].includes(lead.status)).map((lead) => {
+                const sent = Number(lead.whatsapp_messages_sent || 0);
+                const total = Math.max(1, Number(lead.whatsapp_total_messages || 4));
+                const percent = Math.min(100, Math.round((sent / total) * 100));
+                return <article className="whatsapp-pipeline-card" key={lead.id}>
+                  <div className="whatsapp-pipeline-card-main">
+                    <div className="lead-name-row"><h3>{lead.name}</h3><span className="stage-badge stage-contacted">Em andamento</span></div>
+                    <p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p>
+                    <div className="whatsapp-pipeline-progress-label"><span>{sent} de {total} mensagens confirmadas</span><strong>{percent}%</strong></div>
+                    <div className="whatsapp-pipeline-progress"><span style={{ width: percent + '%' }} /></div>
+                    <small>{lead.whatsapp_last_message || 'Primeira abordagem preparada'}{lead.whatsapp_last_message_at ? ' · ' + new Date(lead.whatsapp_last_message_at).toLocaleString('pt-BR') : ''}</small>
+                  </div>
+                  <div className="whatsapp-pipeline-actions">
+                    <button type="button" className="whatsapp-pipeline-resume" onClick={() => {
+                      setFilter('all');
+                      setQuery('');
+                      window.setTimeout(() => {
+                        const target = document.getElementById('lead-' + lead.id);
+                        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 120);
+                    }}>Localizar lead ↘</button>
+                    <button type="button" className="whatsapp-pipeline-archive" onClick={() => {
+                      registerWhatsAppActivity(lead.id, {
+                        whatsapp_tracking_status: 'archived',
+                        whatsapp_last_message: 'Acompanhamento arquivado',
+                        whatsapp_last_message_at: new Date().toISOString(),
+                      }).catch((err) => setError(err.message));
+                    }}>Arquivar</button>
+                  </div>
+                </article>;
+              })}
+          </div>
+        </section>
+
         <section id="captura" className="capture-panel">
           <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Busque empresas locais que ainda não possuem site.</p></div><span className="capture-icon">⌕</span></div>
           <form onSubmit={startSearch} className="prospect-form">
@@ -375,8 +429,8 @@ export default function ProspeccaoPage() {
               visible.map((lead) => {
                 const wa = whatsapp(lead.phone);
                 const social = socialProfile(lead);
-                return <article className="prospect-lead" key={lead.id}>
-                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (social ? 'has-social' : 'no-social')}>{social ? 'Sem site · com ' + social.label : 'Sem site · sem rede social'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa ? <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onContactConfirmed={registerLeadContact} /> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
+                return <article id={'lead-' + lead.id} className="prospect-lead" key={lead.id}>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (social ? 'has-social' : 'no-social')}>{social ? 'Sem site · com ' + social.label : 'Sem site · sem rede social'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa ? <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onContactConfirmed={registerLeadContact} onWhatsAppActivity={registerWhatsAppActivity} /> : <span className="no-phone">Telefone não encontrado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
                   <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
                 </article>;
               })
