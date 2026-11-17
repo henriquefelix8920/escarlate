@@ -151,7 +151,7 @@ function migrateDefaultSequence(sequence) {
   return { ...sequence, messages };
 }
 
-export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContactConfirmed, onWhatsAppActivity, triggerLabel = 'Assistente WhatsApp', triggerClassName }) {
+export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onWhatsAppActivity, triggerLabel = 'Assistente WhatsApp', triggerClassName }) {
   const [sequences, setSequences] = useState([DEFAULT_SEQUENCE]);
   const [progress, setProgress] = useState({});
   const [storageReady, setStorageReady] = useState(false);
@@ -286,7 +286,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
     // O WhatsApp não informa ao Escarlate se o usuário realmente tocou em Enviar.
     const now = new Date().toISOString();
     const nextCount = Number(lead.whatsapp_messages_sent || 0) + 1;
-    setFeedback('Mensagem aberta no WhatsApp e registrada no acompanhamento. Confira e envie por lá; não precisa voltar para confirmar.');
+    setFeedback('Mensagem aberta no WhatsApp e registrada no acompanhamento. Confira e envie por lá.');
     try {
       if (onWhatsAppActivity) {
         await onWhatsAppActivity(lead.id, {
@@ -297,9 +297,6 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
           whatsapp_last_message: `${template.id} — ${template.title} (aberta no WhatsApp; envio não verificado)`,
           whatsapp_last_message_at: now,
         });
-      }
-      if (onContactConfirmed) {
-        await onContactConfirmed(lead.id, 'whatsapp', lead.status === 'new' ? 'contacted' : null);
       }
     } catch (error) {
       setFeedback(`WhatsApp aberto, mas não consegui salvar o registro no CRM: ${error.message}. Atualize o painel e tente novamente.`);
@@ -339,13 +336,10 @@ Esse link é uma referência visual. O seu site seria desenvolvido sob medida pa
 A ideia é criar um site com a sua identidade, que valorize o seu trabalho e transmita confiança desde o primeiro acesso. Dê uma olhadinha e me conte o que achou! 😊`;
 
     // Abre uma aba vazia de forma síncrona para evitar o bloqueio de pop-ups
-    // enquanto o CRM salva a etapa comercial e registra o contato no banco.
+    // sem alterar a etapa comercial; ela será atualizada manualmente no funil.
     const whatsappWindow = window.open('about:blank', '_blank');
 
     try {
-      if (onContactConfirmed) {
-        await onContactConfirmed(lead.id, 'whatsapp', 'interested');
-      }
       if (onWhatsAppActivity) {
         await onWhatsAppActivity(lead.id, {
           whatsapp_tracking_status: 'active',
@@ -354,19 +348,19 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
         });
       }
       if (!whatsappWindow) {
-        setFeedback('Lead atualizado para Interessado, mas o navegador bloqueou a aba do WhatsApp. Permita pop-ups para abrir a mensagem.');
+        setFeedback('Mensagem preparada, mas o navegador bloqueou a aba do WhatsApp. Permita pop-ups para abrir a mensagem.');
         return;
       }
       if (whatsappWindow.closed) {
-        setFeedback('Lead atualizado para Interessado, mas a aba do WhatsApp foi fechada antes de abrir a mensagem.');
+        setFeedback('Mensagem preparada, mas a aba do WhatsApp foi fechada antes de abrir a mensagem.');
         return;
       }
       whatsappWindow.location.href = withMessage(whatsappUrl, message);
       whatsappWindow.opener = null;
-      setFeedback('Lead atualizado para Interessado. Mensagem com o site de demonstração aberta no WhatsApp; confira e toque em Enviar.');
+      setFeedback('Mensagem com o site de demonstração aberta no WhatsApp; confira e toque em Enviar. A etapa do lead não foi alterada.');
     } catch (error) {
       if (whatsappWindow && !whatsappWindow.closed) whatsappWindow.close();
-      setFeedback(`Não consegui concluir a atualização do lead e registrar o contato: ${error.message} Tente novamente.`);
+      setFeedback(`Não consegui preparar a mensagem: ${error.message} Tente novamente.`);
     }
   }
 
@@ -408,9 +402,8 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
 
   async function confirmFollowUpSent() {
     try {
-      if (onContactConfirmed) await onContactConfirmed(lead.id, 'whatsapp');
       setFollowUpAwaitingConfirmation(false);
-      setFollowUpFeedback('Follow-up registrado. O contato de hoje foi contabilizado no CRM.');
+      setFollowUpFeedback('Follow-up confirmado no assistente. A etapa comercial continua sob seu controle no funil.');
     } catch (error) {
       setFollowUpFeedback(`Não consegui registrar o follow-up: ${error.message}. Tente novamente.`);
     }
@@ -433,15 +426,6 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
     const nextStep = currentStep + 1;
     const isFinalStep = nextStep >= activeSequence.messages.length;
 
-    try {
-      if (onContactConfirmed) {
-        await onContactConfirmed(lead.id, 'whatsapp', isFinalStep ? 'contacted' : null);
-      }
-    } catch (error) {
-      setFeedback(`Não consegui registrar o contato e atualizar a etapa do lead: ${error.message} Tente confirmar novamente.`);
-      return;
-    }
-
     if (onWhatsAppActivity) {
       try {
         await onWhatsAppActivity(lead.id, {
@@ -452,7 +436,7 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
           whatsapp_last_message_at: new Date().toISOString(),
         });
       } catch (error) {
-        setFeedback(`Contato registrado, mas não consegui atualizar o painel de acompanhamento: ${error.message}`);
+        setFeedback(`Mensagem confirmada, mas não consegui atualizar o painel de acompanhamento: ${error.message}`);
       }
     }
 
