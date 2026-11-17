@@ -264,14 +264,8 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
     setScreen('buttons');
     setIsOpen(true);
 
-    // Abrir o assistente já inicia o trabalho comercial deste lead.
-    if (onContactConfirmed) {
-      try {
-        await onContactConfirmed(lead.id, 'whatsapp', 'contacted');
-      } catch (error) {
-        setFeedback(`Assistente aberto, mas não consegui classificar o lead como contatado: ${error.message}`);
-      }
-    }
+    // Apenas abrir o assistente não significa que houve contato.
+    // O lead só muda de etapa quando uma mensagem é aberta no WhatsApp.
   }
 
   async function openMessageButton(template) {
