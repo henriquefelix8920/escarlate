@@ -403,7 +403,7 @@ export default function ProspeccaoPage() {
         </section>
 
         <section id="captura" className="capture-panel">
-          <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Busque empresas locais que ainda não possuem site.</p></div><span className="capture-icon">⌕</span></div>
+          <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>{searchChannel === 'instagram' ? 'Encontre empresas cujo site cadastrado no Google Maps é o perfil do Instagram.' : 'Busque empresas locais que ainda não possuem site próprio.'}</p></div><span className="capture-icon">⌕</span></div>
           <div className="search-channel-toggle" role="group" aria-label="Tipo de busca">
             <button type="button" className={searchChannel === 'whatsapp' ? 'is-active whatsapp' : ''} onClick={() => setSearchChannel('whatsapp')}>☎ Buscar leads com WhatsApp</button>
             <button type="button" className={searchChannel === 'instagram' ? 'is-active instagram' : ''} onClick={() => setSearchChannel('instagram')}>◎ Buscar leads com Instagram</button>
