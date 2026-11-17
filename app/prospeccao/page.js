@@ -32,7 +32,7 @@ const socialLabelForUrl = (value) => {
   let host = '';
   try {
     host = new URL(url.startsWith('http') ? url : 'https://' + url)
-      .hostname.toLowerCase().replace(/^www\\./, '');
+      .hostname.toLowerCase().replace(/^www\./, '');
   } catch {
     return null;
   }
