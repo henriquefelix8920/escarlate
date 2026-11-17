@@ -281,7 +281,8 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onContact
     }
     const message = renderMessage(template.message, { ...values, saudacao: getGreeting() });
     if (!message) return;
-    const whatsappWindow = window.open(withMessage(whatsappUrl, message), '_blank', 'noopener,noreferrer');
+    const whatsappWindow = window.open(withMessage(whatsappUrl, message), '_blank');
+    if (whatsappWindow) whatsappWindow.opener = null;
     if (!whatsappWindow) {
       setFeedback('O navegador bloqueou a abertura do WhatsApp. Permita pop-ups e tente novamente.');
       return;
