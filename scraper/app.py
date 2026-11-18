@@ -554,6 +554,135 @@ async def _run_search(job_id: str, data: SearchRequest):
                 pass
 
 
+class InstagramDiscoveryRequest(BaseModel):
+    region: str = Field(default="Brasil", min_length=2, max_length=100)
+    category: str = Field(default="nutricionista", min_length=2, max_length=100)
+    limit: int = Field(default=25, ge=1, le=50)
+
+
+@app.post("/api/instagram-discovery", dependencies=[Depends(require_token)])
+async def start_instagram_discovery(data: InstagramDiscoveryRequest, background: BackgroundTasks):
+    client = db()
+    active = client.table("search_jobs").select("*").in_("status", ["queued", "running", "retry_wait", "cancelling"]).order("created_at", desc=True).limit(1).execute()
+    if active.data:
+        return active.data[0]
+    job_id = str(uuid.uuid4())
+    client.table("search_jobs").insert({
+        "id": job_id, "term": f"Instagram: {data.category}", "city": data.region,
+        "status": "queued", "requested_limit": data.limit, "found_count": 0,
+        "message": json.dumps({"kind": "instagram_discovery", "region": data.region, "category": data.category}, ensure_ascii=False),
+    }).execute()
+    background.add_task(run_instagram_discovery, job_id, data)
+    return {"id": job_id, "status": "queued"}
+
+
+async def run_instagram_discovery(job_id: str, data: InstagramDiscoveryRequest):
+    client = db()
+    browser = None
+    progress = {"version": 1, "phase": "starting", "detail": "Preparando descoberta de perfis públicos indexados…", "scanned": 0, "candidates": 0, "duplicates": 0, "errors": 0, "saved": 0}
+    def update_job(**values):
+        client.table("search_jobs").update(values).eq("id", job_id).execute()
+    def report(phase=None, detail=None, **counts):
+        if phase: progress["phase"] = phase
+        if detail: progress["detail"] = detail
+        progress.update(counts)
+        update_job(found_count=progress["saved"], message=json.dumps(progress, ensure_ascii=False), last_heartbeat_at=datetime.now(timezone.utc).isoformat())
+    def check_cancelled():
+        row = client.table("search_jobs").select("status").eq("id", job_id).limit(1).execute()
+        if row.data and row.data[0].get("status") in {"cancelling", "cancelled"}:
+            update_job(status="cancelled", finished_at=datetime.now(timezone.utc).isoformat())
+            raise SearchCancelled()
+    try:
+        check_cancelled()
+        update_job(status="running", last_heartbeat_at=datetime.now(timezone.utc).isoformat())
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--disable-extensions", "--no-zygote", "--renderer-process-limit=1"])
+            page = await browser.new_page(locale="pt-BR", viewport={"width": 1280, "height": 800})
+            async def block_heavy(route):
+                if route.request.resource_type in {"image", "media", "font"}:
+                    await route.abort()
+                else:
+                    await route.continue_()
+            await page.route("**/*", block_heavy)
+            query = f'site:instagram.com/ "{data.category}" "{data.region}" -inurl:/p/ -inurl:/reel/ -inurl:/stories/'
+            target = "https://www.google.com/search?q=" + quote(query) + "&num=50"
+            report(phase="searching", detail=f"Pesquisando perfis públicos indexados para {data.category} — {data.region}…")
+            await page.goto(target, wait_until="domcontentloaded", timeout=60000)
+            check_cancelled()
+            try:
+                await page.locator("body").wait_for(timeout=10000)
+            except Exception:
+                raise RuntimeError("A pesquisa não retornou uma página utilizável.")
+            results = await page.locator("a[href]").evaluate_all("""els => els.map(a => {
+              const href = a.href || '';
+              const box = a.closest('div.MjjYud') || a.parentElement?.parentElement;
+              return {href, text: (box?.innerText || a.innerText || '').slice(0, 1200)};
+            })""")
+            found_urls = {}
+            for item in results:
+                href = item.get("href", "")
+                try:
+                    u = urlparse(href)
+                    host = (u.hostname or "").lower().removeprefix("www.")
+                    if host not in {"instagram.com", "m.instagram.com"}: continue
+                    parts = [p for p in u.path.split("/") if p]
+                    if not parts or parts[0].lower() in {"p","reel","reels","stories","explore","accounts","about","developer"}: continue
+                    username = parts[0].lstrip("@")
+                    if not re.fullmatch(r"[A-Za-z0-9._]{2,30}", username): continue
+                    canonical = f"https://www.instagram.com/{username}/"
+                    found_urls.setdefault(username.lower(), {"username": username, "url": canonical, "snippet": item.get("text","")})
+                except Exception:
+                    continue
+            report(phase="analyzing", detail=f"{len(found_urls)} perfis candidatos encontrados no índice de pesquisa. Verificando duplicados…", candidates=len(found_urls))
+            for candidate in list(found_urls.values()):
+                check_cancelled()
+                if progress["saved"] >= data.limit: break
+                progress["scanned"] += 1
+                username = candidate["username"]
+                try:
+                    existing = client.table("instagram_prospects").select("id").ilike("instagram_url", candidate["url"]).limit(1).execute()
+                    if existing.data:
+                        progress["duplicates"] += 1
+                        report(detail=f"@{username} já está no Radar.")
+                        continue
+                    snippet = re.sub(r"\\s+", " ", candidate["snippet"]).strip()[:1800]
+                    row = {
+                        "name": username.replace(".", " ").replace("_", " ").title()[:180],
+                        "username": username[:80], "instagram_url": candidate["url"],
+                        "city": data.region[:120],
+                        "bio": snippet or None,
+                        "opportunity_reason": "Perfil profissional candidato encontrado em resultados públicos indexados. A existência de site próprio e a correspondência com uma nutricionista ainda precisam ser validadas.",
+                        "notes": f"Descoberto automaticamente por pesquisa pública: {query}. Confira o perfil, a bio e cruze o nome com o Google Maps antes de abordar.",
+                        "source": "public_search_index",
+                        "status": "new",
+                    }
+                    client.table("instagram_prospects").insert(row).execute()
+                    progress["saved"] += 1
+                    report(detail=f"Perfil candidato adicionado: @{username}.")
+                except Exception as exc:
+                    if "23505" in str(exc).lower() or "duplicate" in str(exc).lower():
+                        progress["duplicates"] += 1
+                    else:
+                        progress["errors"] += 1
+                        print(f"Instagram discovery {job_id}: {type(exc).__name__}: {str(exc)[:250]}", flush=True)
+                    report(detail=f"Analisando perfis encontrados… ({progress['scanned']})")
+            check_cancelled()
+        report(phase="completed", detail=f"Descoberta concluída: {progress['saved']} perfis candidatos adicionados. Revise os perfis e confirme a especialidade e o site antes de abordar.")
+        update_job(status="completed", found_count=progress["saved"], message=json.dumps(progress, ensure_ascii=False), finished_at=datetime.now(timezone.utc).isoformat())
+    except SearchCancelled:
+        return
+    except Exception as exc:
+        try: check_cancelled()
+        except SearchCancelled: return
+        progress["phase"] = "failed"
+        progress["detail"] = "A descoberta foi interrompida por um erro."
+        update_job(status="failed", found_count=progress["saved"], message=json.dumps(progress, ensure_ascii=False), error=str(exc)[:500], finished_at=datetime.now(timezone.utc).isoformat())
+    finally:
+        if browser:
+            try: await browser.close()
+            except Exception: pass
+
+
 class InstagramSearchRequest(BaseModel):
     city: str = Field(min_length=2, max_length=100)
     category: str = Field(default="nutricionista", min_length=2, max_length=100)
