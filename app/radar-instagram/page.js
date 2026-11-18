@@ -16,9 +16,39 @@ export default function RadarInstagramPage() {
   const [prospects,setProspects]=useState([]), [loading,setLoading]=useState(true), [saving,setSaving]=useState(false);
   const [error,setError]=useState(''), [feedback,setFeedback]=useState(''), [search,setSearch]=useState(''), [stageFilter,setStageFilter]=useState('all');
   const [activeId,setActiveId]=useState(null), [message,setMessage]=useState('');
+  const [searchCity,setSearchCity]=useState('');
+  const [searchLimit,setSearchLimit]=useState('20');
+  const [searching,setSearching]=useState(false), [job,setJob]=useState(null);
+  const [searchError,setSearchError]=useState('');
   const [form,setForm]=useState({name:'',instagram_url:'',city:'',bio:'',website:'',maps_website:'',opportunity_reason:'',notes:''});
   const load=useCallback(async()=>{setLoading(true);try{const r=await fetch('/api/instagram-prospects',{cache:'no-store'});const d=await readJson(r);if(!r.ok)throw new Error(d.error||'Falha ao carregar oportunidades.');setProspects(d.prospects||[]);setError('');}catch(e){setError(e.message);}finally{setLoading(false);}},[]);
   useEffect(()=>{load();},[load]);
+  useEffect(()=>{
+    if(!job?.id || ['completed','failed','cancelled'].includes(job.status)) return;
+    const timer=setInterval(async()=>{
+      try {
+        const r=await fetch('/api/jobs/'+encodeURIComponent(job.id),{cache:'no-store'});
+        const d=await readJson(r);
+        if(!r.ok) throw new Error(d.error||'Falha ao consultar o progresso.');
+        setJob(d);
+        if(['completed','failed','cancelled'].includes(d.status)) {
+          setSearching(false);
+          if(d.status==='completed') { await load(); setFeedback('Busca concluída! Os perfis encontrados foram adicionados ao Radar. Confira a bio e os links antes de abordar.'); }
+          else if(d.status==='failed') setSearchError(d.error||'A busca automática falhou.');
+        }
+      } catch(e) { setSearchError(e.message); }
+    },2500);
+    return ()=>clearInterval(timer);
+  },[job?.id,job?.status,load]);
+  async function startAutomaticSearch(e){
+    e.preventDefault(); setSearching(true); setSearchError(''); setFeedback(''); setJob(null);
+    try {
+      const r=await fetch('/api/instagram-search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({city:searchCity.trim(),category:'nutricionista',limit:Number(searchLimit)})});
+      const d=await readJson(r);
+      if(!r.ok) throw new Error(d.detail||d.error||'Não foi possível iniciar a busca.');
+      setJob({id:d.id,status:d.status,message:'Busca na fila…'});
+    } catch(e) { setSearching(false); setSearchError(e.message); }
+  }
   const counts=useMemo(()=>({total:prospects.length,waiting:prospects.filter(p=>['new','reviewed','message_prepared'].includes(p.status)).length,replies:prospects.filter(p=>['replied','qualified','handed_off'].includes(p.status)).length}),[prospects]);
   const visible=useMemo(()=>{const t=search.trim().toLocaleLowerCase('pt-BR');return prospects.filter(p=>(stageFilter==='all'||p.status===stageFilter)&&[p.name,p.username,p.city,p.bio,p.opportunity_reason].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(t));},[prospects,search,stageFilter]);
   async function addProspect(e){e.preventDefault();setSaving(true);setError('');setFeedback('');try{const r=await fetch('/api/instagram-prospects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});const d=await readJson(r);if(!r.ok)throw new Error(d.error||'Não foi possível cadastrar o perfil.');setProspects(old=>[d.prospect,...old]);setForm({name:'',instagram_url:'',city:'',bio:'',website:'',maps_website:'',opportunity_reason:'',notes:''});setActiveId(d.prospect.id);setMessage(makeOpeningMessage(d.prospect));setFeedback('Perfil adicionado. Revise os dados e personalize a mensagem antes de qualquer envio.');}catch(e){setError(e.message);}finally{setSaving(false);}}
@@ -43,8 +73,20 @@ export default function RadarInstagramPage() {
         <a className="radar-search-instagram" href="https://www.instagram.com/explore/search/keyword/?q=nutricionista" target="_blank" rel="noreferrer">◎ Abrir busca no Instagram</a>
       </header>
       <div className="radar-stats"><article><span>Perfis no Radar</span><strong>{counts.total}</strong></article><article><span>Aguardando abordagem</span><strong>{counts.waiting}</strong></article><article><span>Respostas e oportunidades</span><strong>{counts.replies}</strong></article></div>
+      <section className="radar-panel radar-auto-search">
+        <div className="radar-section-heading"><div><span className="radar-eyebrow">DESCOBERTA AUTOMÁTICA</span><h2>Encontrar nutricionistas para o Radar</h2><p>O Escarlate pesquisa no Google Maps e importa os estabelecimentos que divulgam o Instagram como site.</p></div></div>
+        <form className="radar-auto-form" onSubmit={startAutomaticSearch}>
+          <label>Localização<input required minLength={2} maxLength={100} value={searchCity} onChange={e=>setSearchCity(e.target.value)} placeholder="Ex.: Frutal, MG ou São Paulo, SP"/></label>
+          <label>Quantidade máxima<select value={searchLimit} onChange={e=>setSearchLimit(e.target.value)}><option value="10">10 perfis</option><option value="20">20 perfis</option><option value="30">30 perfis</option><option value="50">50 perfis</option></select></label>
+          <button disabled={searching}>{searching?'Pesquisando…':'Buscar e importar perfis'}</button>
+        </form>
+        <p className="radar-auto-note">A busca é automática. Os perfis encontrados entram direto na lista abaixo, sem preencher cadastro. Ela prioriza nutricionistas cujo Google Maps aponta para Instagram em vez de um site próprio.</p>
+        {searching&&<div className="radar-job-progress"><span className="radar-spinner"/><div><strong>{job?.status==='queued'?'Busca na fila':job?.status==='running'?'Busca em andamento':'Iniciando busca'}</strong><p>{(()=>{try{return JSON.parse(job?.message||'{}').detail||'Preparando a pesquisa…'}catch{return job?.message||'Preparando a pesquisa…'}})()}</p></div></div>}
+        {job?.status==='completed'&&<div className="radar-job-result">Busca concluída: {job.found_count||0} perfis novos adicionados ao Radar.</div>}
+        {searchError&&<div className="radar-error">{searchError}</div>}
+      </section>
       <section className="radar-panel">
-        <div className="radar-section-heading"><div><span className="radar-eyebrow">CAPTURA ASSISTIDA</span><h2>Adicionar nutricionista encontrada</h2><p>Pesquise no Instagram, confira a bio e valide o site no Google Maps. Depois registre aqui.</p></div></div>
+        <div className="radar-section-heading"><div><span className="radar-eyebrow">CADASTRO MANUAL OPCIONAL</span><h2>Adicionar perfil manualmente</h2><p>Use somente se quiser cadastrar um perfil que a busca automática não encontrou.</p></div></div>
         <form className="radar-form" onSubmit={addProspect}>
           <label>Nome da profissional<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Ex.: Ana Souza"/></label>
           <label>Link do perfil no Instagram<input required type="url" value={form.instagram_url} onChange={e=>setForm({...form,instagram_url:e.target.value})} placeholder="https://www.instagram.com/usuario/"/></label>
