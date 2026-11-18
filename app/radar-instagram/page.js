@@ -43,7 +43,7 @@ export default function RadarInstagramPage() {
   async function startAutomaticSearch(e){
     e.preventDefault(); setSearching(true); setSearchError(''); setFeedback(''); setJob(null);
     try {
-      const r=await fetch('/api/instagram-search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({city:searchCity.trim(),category:'nutricionista',limit:Number(searchLimit)})});
+      const r=await fetch('/api/instagram-discovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({region:searchCity.trim(),category:'nutricionista',limit:Number(searchLimit)})});
       const d=await readJson(r);
       if(!r.ok) throw new Error(d.detail||d.error||'Não foi possível iniciar a busca.');
       setJob({id:d.id,status:d.status,message:'Busca na fila…'});
@@ -74,13 +74,13 @@ export default function RadarInstagramPage() {
       </header>
       <div className="radar-stats"><article><span>Perfis no Radar</span><strong>{counts.total}</strong></article><article><span>Aguardando abordagem</span><strong>{counts.waiting}</strong></article><article><span>Respostas e oportunidades</span><strong>{counts.replies}</strong></article></div>
       <section className="radar-panel radar-auto-search">
-        <div className="radar-section-heading"><div><span className="radar-eyebrow">DESCOBERTA AUTOMÁTICA</span><h2>Encontrar nutricionistas para o Radar</h2><p>O Escarlate pesquisa no Google Maps e importa os estabelecimentos que divulgam o Instagram como site.</p></div></div>
+        <div className="radar-section-heading"><div><span className="radar-eyebrow">DESCOBERTA AUTOMÁTICA</span><h2>Encontrar nutricionistas para o Radar</h2><p>O Escarlate pesquisa perfis públicos de nutricionistas indexados na web e importa candidatos para revisão.</p></div></div>
         <form className="radar-auto-form" onSubmit={startAutomaticSearch}>
-          <label>Localização<input required minLength={2} maxLength={100} value={searchCity} onChange={e=>setSearchCity(e.target.value)} placeholder="Ex.: Frutal, MG ou São Paulo, SP"/></label>
+          <label>Região<input required minLength={2} maxLength={100} value={searchCity} onChange={e=>setSearchCity(e.target.value)} placeholder="Ex.: Brasil ou Minas Gerais"/></label>
           <label>Quantidade máxima<select value={searchLimit} onChange={e=>setSearchLimit(e.target.value)}><option value="10">10 perfis</option><option value="20">20 perfis</option><option value="30">30 perfis</option><option value="50">50 perfis</option></select></label>
-          <button disabled={searching}>{searching?'Pesquisando…':'Buscar e importar perfis'}</button>
+          <button disabled={searching}>{searching?'Pesquisando…':'Pesquisar perfis públicos'}</button>
         </form>
-        <p className="radar-auto-note">A busca é automática. Os perfis encontrados entram direto na lista abaixo, sem preencher cadastro. Ela prioriza nutricionistas cujo Google Maps aponta para Instagram em vez de um site próprio.</p>
+        <p className="radar-auto-note">A busca usa resultados públicos indexados na web, não acessa contas privadas nem simula ações no Instagram. Os perfis entram direto na lista; confirme nome, especialidade, bio e site próprio antes de abordar.</p>
         {searching&&<div className="radar-job-progress"><span className="radar-spinner"/><div><strong>{job?.status==='queued'?'Busca na fila':job?.status==='running'?'Busca em andamento':'Iniciando busca'}</strong><p>{(()=>{try{return JSON.parse(job?.message||'{}').detail||'Preparando a pesquisa…'}catch{return job?.message||'Preparando a pesquisa…'}})()}</p></div></div>}
         {job?.status==='completed'&&<div className="radar-job-result">Busca concluída: {job.found_count||0} perfis novos adicionados ao Radar.</div>}
         {searchError&&<div className="radar-error">{searchError}</div>}
@@ -101,7 +101,7 @@ export default function RadarInstagramPage() {
       </section>
       {error&&<div className="radar-error">{error}</div>}{feedback&&<div className="radar-feedback" role="status">{feedback}</div>}
       <section className="radar-panel">
-        <div className="radar-section-heading"><div><span className="radar-eyebrow">PIPELINE DE INSTAGRAM</span><h2>Oportunidades cadastradas</h2></div><span className="radar-count">{visible.length} de {prospects.length}</span></div>
+        <div className="radar-section-heading"><div><span className="radar-eyebrow">PIPELINE DE INSTAGRAM</span><h2>Perfis encontrados e oportunidades</h2></div><span className="radar-count">{visible.length} de {prospects.length}</span></div>
         <div className="radar-toolbar"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar por nome, @usuário ou cidade…"/><select value={stageFilter} onChange={e=>setStageFilter(e.target.value)}><option value="all">Todas as etapas</option>{stages.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><button type="button" onClick={load}>Atualizar</button></div>
         {loading?<div className="radar-empty">Carregando oportunidades…</div>:visible.length===0?<div className="radar-empty">Nenhum perfil cadastrado ainda. Abra a busca do Instagram e adicione a primeira nutricionista encontrada.</div>:<div className="radar-list">{visible.map(p=><article className="radar-lead" key={p.id}>
           <div className="radar-lead-main"><div className="radar-lead-title"><h3>{p.name}</h3><span>@{p.username}</span><em>{stages.find(([v])=>v===p.status)?.[1]||p.status}</em></div><p>{[p.city,p.opportunity_reason].filter(Boolean).join(' · ')||'Sem observações de oportunidade.'}</p><div className="radar-links"><a href={p.instagram_url} target="_blank" rel="noreferrer">Abrir perfil</a>{p.website&&<a href={/^https?:\/\//i.test(p.website)?p.website:'https://'+p.website} target="_blank" rel="noreferrer">Link da bio</a>}</div></div>
