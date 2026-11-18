@@ -59,28 +59,63 @@ def normalize_instagram_profile_url(value: str) -> str:
 
 
 async def find_public_instagram_profile(page, name: str, city: str, category: str) -> str:
-    query = f'site:instagram.com/ "{name}" "{city}" "{category}" -inurl:/p/ -inurl:/reel/ -inurl:/stories/'
-    await page.goto("https://www.google.com/search?q=" + quote(query), wait_until="domcontentloaded", timeout=25000)
-    await page.wait_for_timeout(500)
-    anchors = await page.locator('a[href*="instagram.com"]').all()
+    """Find a likely public Instagram profile using progressively broader public Google queries."""
+    clean_name = re.sub(r"\\s+", " ", (name or "").strip())
+    clean_city = re.sub(r"\\s+", " ", (city or "").strip())
     name_tokens = [
-        token.lower() for token in re.findall(r"[A-Za-zÀ-ÿ]{3,}", name)
-        if token.lower() not in {"nutricionista", "nutricionistas", "clinica", "clínica", "consultorio", "consultório"}
+        token.lower() for token in re.findall(r"[A-Za-zÀ-ÿ]{3,}", clean_name)
+        if token.lower() not in {
+            "nutricionista", "nutricionistas", "clinica", "clínica",
+            "consultorio", "consultório", "profissional", "servicos", "serviços",
+        }
     ]
-    for anchor in anchors[:30]:
-        profile = normalize_instagram_profile_url(await anchor.get_attribute("href") or "")
-        if not profile:
-            continue
+    if not clean_name:
+        return ""
+
+    queries = [
+        f'site:instagram.com/ "{clean_name}" "{clean_city}" -inurl:/p/ -inurl:/reel/ -inurl:/stories/',
+        f'site:instagram.com/ "{clean_name}" -inurl:/p/ -inurl:/reel/ -inurl:/stories/',
+    ]
+    if name_tokens:
+        queries.append(
+            f'site:instagram.com/ "{name_tokens[0]}" "{clean_city}" -inurl:/p/ -inurl:/reel/ -inurl:/stories/'
+        )
+
+    seen = set()
+    for query in queries:
         try:
-            result_text = await anchor.evaluate(
-                "el => (el.closest('div.MjjYud') || el.parentElement?.parentElement || el).innerText || ''"
+            await page.goto(
+                "https://www.google.com/search?q=" + quote(query),
+                wait_until="domcontentloaded",
+                timeout=25000,
             )
-        except Exception:
-            result_text = await anchor.inner_text()
-        normalized_text = re.sub(r"\s+", " ", result_text or "").lower()
-        if name_tokens and not any(token in normalized_text for token in name_tokens):
+            await page.wait_for_timeout(700)
+            anchors = await page.locator('a[href*="instagram.com"]').all()
+        except Exception as exc:
+            print(f"Google não retornou resultados para {clean_name[:60]}: {type(exc).__name__}", flush=True)
             continue
-        return profile
+
+        for anchor in anchors[:40]:
+            href = await anchor.get_attribute("href") or ""
+            profile = normalize_instagram_profile_url(href)
+            if not profile or profile in seen:
+                continue
+            seen.add(profile)
+            username = urlparse(profile).path.strip("/").lower()
+            try:
+                result_text = await anchor.evaluate(
+                    "el => (el.closest('div.MjjYud') || el.parentElement?.parentElement || el).innerText || ''"
+                )
+            except Exception:
+                try:
+                    result_text = await anchor.inner_text()
+                except Exception:
+                    result_text = ""
+            evidence = (result_text + " " + username).lower()
+            # A candidate must have at least one distinctive part of the business/person name.
+            if name_tokens and not any(token in evidence for token in name_tokens):
+                continue
+            return profile
     return ""
 
 
