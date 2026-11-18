@@ -122,6 +122,14 @@ async def find_public_instagram_profile(page, name: str, city: str, category: st
 def digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
+
+def has_usable_whatsapp_number(value: str) -> bool:
+    """Accept Brazilian public phone formats that can be opened as a wa.me chat."""
+    normalized = digits(value)
+    if normalized.startswith("55") and len(normalized) in (12, 13):
+        normalized = normalized[2:]
+    return len(normalized) in (10, 11)
+
 SOCIAL_HOSTS = {
     "instagram.com": "instagram",
     "facebook.com": "facebook", "fb.com": "facebook",
@@ -374,6 +382,7 @@ async def _run_search(job_id: str, data: SearchRequest):
     progress = {
         "version": 1, "phase": "starting", "detail": "Preparando a pesquisa…",
         "scanned": 0, "candidates": 0, "with_website": 0, "with_social": 0, "with_instagram": 0,
+        "with_whatsapp": 0, "without_whatsapp": 0,
         "duplicates": 0, "errors": 0, "saved": int(job_row.get("found_count") or 0),
         "batch": 0, "total_batches": 0, **progress,
     }
@@ -535,7 +544,19 @@ async def _run_search(job_id: str, data: SearchRequest):
                                     website = await element.get_attribute("href") or ""
     
                         social_network, social_url = classify_social_url(website)
-                        if data.channel == "instagram" and social_network != "instagram":
+                        if data.channel == "whatsapp":
+                            if website.strip() and not social_network:
+                                progress["with_website"] += 1
+                                progress["scanned"] += 1
+                                report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site próprio.")
+                                continue
+                            if not has_usable_whatsapp_number(phone):
+                                progress["without_whatsapp"] += 1
+                                progress["scanned"] += 1
+                                report_progress(detail=f"Analisando: {name[:70]} — sem telefone público em formato compatível com WhatsApp.")
+                                continue
+                            progress["with_whatsapp"] += 1
+                        elif data.channel == "instagram" and social_network != "instagram":
                             if website.strip() and not social_network:
                                 progress["with_website"] += 1
                                 progress["scanned"] += 1
@@ -568,8 +589,8 @@ async def _run_search(job_id: str, data: SearchRequest):
                         row = {
                             "name": name[:200], "category": data.category,
                             "phone": phone or None, "phone_normalized": normalized or None,
-                            "website": None, "instagram": social_url if social_network == "instagram" else None,
-                            "profile": social_url if social_network and social_network != "instagram" else None,
+                            "website": None, "instagram": social_url if data.channel == "instagram" and social_network == "instagram" else None,
+                            "profile": social_url if data.channel == "instagram" and social_network and social_network != "instagram" else None,
                             "address": address or None,
                             "city": data.city, "google_maps_url": maps_url,
                             "source": "google_maps", "search_term": f"{data.category} em {data.city}",
