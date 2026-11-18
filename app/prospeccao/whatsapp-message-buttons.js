@@ -3,7 +3,7 @@ export const WHATSAPP_MESSAGE_BUTTONS = [
     id: '01',
     category: 'Mensagens principais',
     title: 'Primeiro contato',
-    description: 'Mensagem inicial para uma nova profissional.',
+    description: 'Mensagem inicial adaptada automaticamente para profissional ou clínica.',
     message: 'Oi, {tratamento} {primeiro_nome}! Tudo bem?\n\nSou o Henrique e trabalho com desenvolvimento de sites para profissionais da saúde.\n\nMe conta uma coisa: você acha que ter um site profissional, onde seus pacientes possam conhecer melhor seu trabalho, consultar suas especialidades e encontrar facilmente suas informações de contato, poderia ajudar a fortalecer sua presença na internet?\n\nPosso te mostrar um exemplo?',
   },
   {
