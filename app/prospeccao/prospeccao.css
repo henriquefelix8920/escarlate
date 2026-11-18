@@ -218,3 +218,5 @@
 .conversation-tab-chevron.is-expanded{transform:rotate(180deg)}
 .conversation-tab-content{margin-top:17px}
 @media(max-width:720px){.conversation-tab-heading{align-items:stretch;flex-direction:column}.conversation-tab-toggle{width:100%}}
+
+@media(max-width:720px){.crm-sidebar a[href="/radar-instagram"]{display:flex;grid-column:1/-1;margin:0;padding:10px 12px;background:rgba(214,64,145,.1);color:#ff9bce}}
