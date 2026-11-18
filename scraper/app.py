@@ -552,3 +552,213 @@ async def _run_search(job_id: str, data: SearchRequest):
                 await browser.close()
             except Exception:
                 pass
+
+
+class InstagramSearchRequest(BaseModel):
+    city: str = Field(min_length=2, max_length=100)
+    category: str = Field(default="nutricionista", min_length=2, max_length=100)
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+@app.post("/api/instagram-search", dependencies=[Depends(require_token)])
+async def start_instagram_search(data: InstagramSearchRequest, background: BackgroundTasks):
+    job_id = str(uuid.uuid4())
+    row = {
+        "id": job_id, "term": data.category, "city": data.city,
+        "status": "queued", "requested_limit": data.limit, "found_count": 0,
+    }
+    try:
+        db().table("search_jobs").insert(row).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Could not create Instagram search job: {str(exc)[:180]}")
+    background.add_task(run_instagram_search, job_id, data)
+    return {"id": job_id, "status": "queued"}
+
+
+async def run_instagram_search(job_id: str, data: InstagramSearchRequest):
+    client = db()
+    browser = None
+    progress = {
+        "version": 1, "phase": "starting",
+        "detail": "Preparando a busca de nutricionistas no Google Maps…",
+        "scanned": 0, "candidates": 0, "with_instagram": 0,
+        "duplicates": 0, "errors": 0, "saved": 0,
+    }
+
+    def update_job(**values):
+        client.table("search_jobs").update(values).eq("id", job_id).execute()
+
+    def report_progress(phase=None, detail=None, **counts):
+        if phase is not None:
+            progress["phase"] = phase
+        if detail is not None:
+            progress["detail"] = detail
+        progress.update(counts)
+        update_job(found_count=progress["saved"], message=json.dumps(progress, ensure_ascii=False))
+
+    def check_cancelled():
+        result = client.table("search_jobs").select("status").eq("id", job_id).maybe_single().execute()
+        if result.data and result.data.get("status") in {"cancelling", "cancelled"}:
+            update_job(status="cancelled", finished_at=datetime.now(timezone.utc).isoformat())
+            raise SearchCancelled()
+
+    try:
+        check_cancelled()
+        update_job(status="running")
+        report_progress(phase="opening_maps", detail="Abrindo o Google Maps para localizar nutricionistas…")
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+                      "--disable-extensions", "--disable-background-networking",
+                      "--disable-default-apps", "--no-zygote", "--renderer-process-limit=1"],
+            )
+            page = await browser.new_page(locale="pt-BR", viewport={"width": 1280, "height": 720})
+
+            async def block_heavy_resources(route):
+                if route.request.resource_type in {"image", "media", "font"}:
+                    await route.abort()
+                else:
+                    await route.continue_()
+
+            await page.route("**/*", block_heavy_resources)
+            target = "https://www.google.com/maps/search/" + quote(f"{data.category} em {data.city}")
+            await page.goto(target, wait_until="domcontentloaded", timeout=60000)
+            check_cancelled()
+            report_progress(phase="collecting", detail="Localizando nutricionistas no Google Maps…")
+            try:
+                await page.locator('div[role="feed"]').wait_for(timeout=25000)
+            except Exception:
+                raise RuntimeError("Google Maps não apresentou a lista. Pode haver CAPTCHA, bloqueio ou ausência de resultados.")
+            feed = page.locator('div[role="feed"]')
+            links = set()
+            for scroll_number in range(10):
+                check_cancelled()
+                anchors = await page.locator('a[href*="/maps/place/"]').all()
+                for anchor in anchors:
+                    href = await anchor.get_attribute("href")
+                    if href:
+                        links.add(href)
+                if len(links) >= data.limit * 4:
+                    break
+                await feed.evaluate("el => el.scrollBy(0, Math.max(el.scrollHeight, 700))")
+                await page.wait_for_timeout(900)
+                report_progress(
+                    phase="collecting",
+                    detail=f"Encontrando nutricionistas (varredura {scroll_number + 1}/10)…",
+                    candidates=len(links),
+                )
+
+            report_progress(
+                phase="analyzing",
+                detail=f"{len(links)} estabelecimentos encontrados. Verificando quais divulgam Instagram…",
+                candidates=len(links),
+            )
+            for maps_url in list(links):
+                check_cancelled()
+                if progress["saved"] >= data.limit:
+                    break
+                try:
+                    await page.goto(maps_url, wait_until="domcontentloaded", timeout=30000)
+                    await page.wait_for_timeout(700)
+                    check_cancelled()
+                    title = page.locator("h1").first
+                    name = (await title.inner_text()).strip() if await title.count() else ""
+                    if not name:
+                        progress["scanned"] += 1
+                        report_progress(detail="Analisando os estabelecimentos encontrados…")
+                        continue
+
+                    address = ""
+                    website = ""
+                    address_el = page.locator('button[data-item-id="address"]').first
+                    if await address_el.count():
+                        value = (await address_el.get_attribute("aria-label")) or (await address_el.inner_text())
+                        address = value.replace("Endereço:", "").strip()
+                    website_el = page.locator('a[data-item-id="authority"]').first
+                    if await website_el.count():
+                        website = (await website_el.get_attribute("href")) or ""
+
+                    if not is_instagram_url(website):
+                        progress["scanned"] += 1
+                        report_progress(detail=f"Analisando {name[:65]} — sem link direto do Instagram no Maps.")
+                        continue
+
+                    from urllib.parse import urlparse
+                    parsed = urlparse(website if website.startswith(("http://", "https://")) else "https://" + website)
+                    username = (parsed.path.strip("/").split("/")[0] if parsed.path.strip("/") else "").replace("@", "")
+                    if not username or username.lower() in {"p", "reel", "stories", "explore"}:
+                        progress["scanned"] += 1
+                        continue
+                    instagram_url = f"https://www.instagram.com/{username}/"
+                    existing = client.table("instagram_prospects").select("id").ilike("instagram_url", instagram_url).limit(1).execute()
+                    if existing.data:
+                        progress["duplicates"] += 1
+                        progress["scanned"] += 1
+                        report_progress(detail=f"{name[:65]} — perfil já está no Radar.")
+                        continue
+
+                    row = {
+                        "name": name[:180],
+                        "username": username[:80],
+                        "instagram_url": instagram_url,
+                        "city": data.city,
+                        "maps_website": website[:500],
+                        "opportunity_reason": "O Google Maps informa o Instagram como site do estabelecimento; não foi identificado um site próprio nesse campo.",
+                        "notes": f"Encontrado automaticamente em uma busca por {data.category} em {data.city}. Confira a bio e valide se existe site próprio antes de abordar.",
+                        "source": "google_maps_instagram_discovery",
+                        "status": "new",
+                    }
+                    try:
+                        client.table("instagram_prospects").insert(row).execute()
+                    except Exception as insert_exc:
+                        if "duplicate" in str(insert_exc).lower() or "23505" in str(insert_exc):
+                            progress["duplicates"] += 1
+                            progress["scanned"] += 1
+                            continue
+                        raise
+                    progress["with_instagram"] += 1
+                    progress["saved"] += 1
+                    progress["scanned"] += 1
+                    report_progress(detail=f"Adicionado ao Radar: {name[:65]} (@{username}).")
+                except SearchCancelled:
+                    raise
+                except Exception as exc:
+                    progress["errors"] += 1
+                    progress["scanned"] += 1
+                    print(f"Erro na descoberta Instagram {job_id}: {type(exc).__name__}: {str(exc)[:250]}", flush=True)
+                    report_progress(detail="Um resultado apresentou erro; a busca continuou.")
+
+            check_cancelled()
+        report_progress(
+            phase="completed",
+            detail=f"Busca concluída: {progress['saved']} perfis adicionados ao Radar. Revise cada perfil antes de abordar.",
+        )
+        update_job(
+            status="completed", found_count=progress["saved"],
+            message=json.dumps(progress, ensure_ascii=False),
+            finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+    except SearchCancelled:
+        return
+    except Exception as exc:
+        try:
+            check_cancelled()
+        except SearchCancelled:
+            return
+        progress["phase"] = "failed"
+        progress["detail"] = "A busca foi interrompida por um erro."
+        try:
+            update_job(
+                status="failed", found_count=progress["saved"],
+                message=json.dumps(progress, ensure_ascii=False),
+                error=str(exc)[:500], finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception as update_exc:
+            print(f"Falha ao registrar erro da busca Instagram {job_id}: {update_exc}", flush=True)
+    finally:
+        if browser:
+            try:
+                await browser.close()
+            except Exception:
+                pass
