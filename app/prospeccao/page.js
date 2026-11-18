@@ -352,6 +352,7 @@ export default function ProspeccaoPage() {
         <a className="nav-item" href="#leads">◉ <span>Leads</span><b>{noSite.length}</b></a>
         <a className="nav-item nav-item-conversations" href="#whatsapp-pipeline">◷ <span>Conversas em andamento</span><b>{activeConversations.length}</b></a>
         <a className="nav-item" href="#captura">⌕ <span>Prospecção</span></a>
+        <Link className="nav-item" href="/radar-instagram">◎ <span>Radar Instagram</span></Link>
         <div className="sidebar-bottom"><span className="status-dot" /> CRM conectado</div>
       </aside>
 
