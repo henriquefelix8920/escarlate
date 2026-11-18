@@ -4,7 +4,7 @@ export const WHATSAPP_MESSAGE_BUTTONS = [
     category: 'Primeiro contato',
     title: 'Primeiro contato',
     description: 'Nova lead; envie uma única vez e aguarde a resposta.',
-    message: 'Oi, {tratamento} {primeiro_nome}! Eu sou o Henrique e desenvolvo sites para profissionais divulgarem seus serviços no Instagram e no Google Maps, ajudando os clientes a entender melhor o que oferecem. Posso te mostrar um exemplo?',
+    message: 'Oi, {tratamento} {primeiro_nome}! Eu sou o Henrique e desenvolvo sites para profissionais divulgarem seus serviços no Instagram e no Google Maps. Um site ajuda seus clientes a conhecerem melhor seu trabalho, encontrar suas informações e ter mais confiança para entrar em contato. Posso te mostrar um exemplo?',
   },
   {
     id: '02',
