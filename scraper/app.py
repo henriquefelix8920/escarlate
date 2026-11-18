@@ -60,8 +60,8 @@ def normalize_instagram_profile_url(value: str) -> str:
 
 async def find_public_instagram_profile(page, name: str, city: str, category: str) -> str:
     """Find a likely public Instagram profile using progressively broader public Google queries."""
-    clean_name = re.sub(r"\\s+", " ", (name or "").strip())
-    clean_city = re.sub(r"\\s+", " ", (city or "").strip())
+    clean_name = re.sub(r"\s+", " ", (name or "").strip())
+    clean_city = re.sub(r"\s+", " ", (city or "").strip())
     name_tokens = [
         token.lower() for token in re.findall(r"[A-Za-zÀ-ÿ]{3,}", clean_name)
         if token.lower() not in {
