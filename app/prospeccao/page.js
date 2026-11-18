@@ -79,7 +79,7 @@ const whatsapp = (phone) => {
 export default function ProspeccaoPage() {
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('');
-  const [limit, setLimit] = useState(20);
+  const [limit] = useState(20);
   const [searchChannel, setSearchChannel] = useState('whatsapp');
   const [leads, setLeads] = useState([]);
   const [job, setJob] = useState(null);
@@ -446,7 +446,6 @@ export default function ProspeccaoPage() {
           <form onSubmit={startSearch} className="prospect-form">
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
             <label>Cidade<input value={city} onChange={(e) => setCity(capitalizeCity(e.target.value))} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
-            <label className="limit-field">Meta de leads<select value={limit} onChange={(e) => setLimit(e.target.value)}>{[20,40,50].map((n) => <option key={n} value={n}>{n} leads</option>)}</select></label>
             <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : searchChannel === 'instagram' ? '◎ Buscar perfis no Instagram' : '⌕ Buscar leads com WhatsApp'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
           <div className="shared-job-heading"><strong>ACOMPANHAMENTO DA PESQUISA</strong><span>Sincronizado automaticamente entre seus aparelhos</span></div>
