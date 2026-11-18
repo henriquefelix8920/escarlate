@@ -130,6 +130,60 @@ def has_usable_whatsapp_number(value: str) -> bool:
         normalized = normalized[2:]
     return len(normalized) in (10, 11)
 
+
+
+async def extract_maps_website(page) -> str:
+    """Read the business website from current and fallback Google Maps DOM patterns."""
+    try:
+        direct = await page.locator(
+            'a[data-item-id="authority"], button[data-item-id="authority"], '
+            'a[aria-label*="Website" i], a[aria-label*="Site" i], '
+            'button[aria-label*="Website" i], button[aria-label*="Site" i]'
+        ).evaluate_all("""elements => elements.map(element => ({
+            href: element.href || element.getAttribute('data-href') || '',
+            label: [
+                element.getAttribute('aria-label') || '',
+                element.getAttribute('data-tooltip') || '',
+                element.getAttribute('title') || '',
+                element.innerText || ''
+            ].join(' ')
+        }))""")
+        for item in direct:
+            href = str(item.get("href") or "").strip()
+            if href and not href.startswith("javascript:"):
+                return href
+    except Exception:
+        pass
+
+    # Google changes Maps' markup occasionally. Fall back to the text/labels
+    # attached to external links instead of silently treating the place as
+    # website-free when the old data-item selector stops matching.
+    try:
+        fallback = await page.evaluate("""() => {
+            const anchors = Array.from(document.querySelectorAll('a[href]'));
+            const matches = anchors.filter(anchor => {
+                const label = [
+                    anchor.getAttribute('aria-label') || '',
+                    anchor.getAttribute('data-tooltip') || '',
+                    anchor.getAttribute('title') || '',
+                    anchor.innerText || ''
+                ].join(' ').toLocaleLowerCase();
+                return /website|site da empresa|site oficial|website do local|visitar site/.test(label);
+            });
+            const found = matches.find(anchor => {
+                try {
+                    const url = new URL(anchor.href);
+                    return url.protocol === 'http:' || url.protocol === 'https:';
+                } catch {
+                    return false;
+                }
+            });
+            return found?.href || '';
+        }""")
+        return str(fallback or "").strip()
+    except Exception:
+        return ""
+
 SOCIAL_HOSTS = {
     "instagram.com": "instagram",
     "facebook.com": "facebook", "fb.com": "facebook",
@@ -531,7 +585,6 @@ async def _run_search(job_id: str, data: SearchRequest):
                         for selector, field in [
                             ('button[data-item-id="address"]', "address"),
                             ('button[data-item-id^="phone:"]', "phone"),
-                            ('a[data-item-id="authority"]', "website"),
                         ]:
                             element = page.locator(selector).first
                             if await element.count():
@@ -540,8 +593,7 @@ async def _run_search(job_id: str, data: SearchRequest):
                                     address = value.replace("Endereço:", "").strip()
                                 elif field == "phone":
                                     phone = value.replace("Telefone:", "").strip()
-                                else:
-                                    website = await element.get_attribute("href") or ""
+                        website = await extract_maps_website(page)
     
                         social_network, social_url = classify_social_url(website)
                         if data.channel == "whatsapp":
