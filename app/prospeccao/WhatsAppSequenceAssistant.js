@@ -46,6 +46,13 @@ function getGreeting() {
   return 'Boa noite';
 }
 
+const CLINIC_INITIAL_MESSAGE = 'Olá! Tudo bem?\n\nSou o Henrique e trabalho com desenvolvimento de sites para clínicas e empresas da área da saúde.\n\nVi o perfil de vocês no Google e gostaria de apresentar uma ideia: um site profissional pode ajudar a apresentar a estrutura, os profissionais, as especialidades e os serviços oferecidos, além de facilitar o contato de novos pacientes.\n\nAcredito que isso pode fortalecer a presença do estabelecimento na internet e transmitir ainda mais confiança para quem procura atendimento.\n\nPosso mostrar um exemplo de como ficaria?';
+
+function isInstitutionalLead(value) {
+  const normalized = normalizeName(value);
+  return /(?:^|\\s)(?:clinica|clinic|centro|instituto|hospital|consultorio|policlinica|laboratorio|unidade|grupo|rede|maternidade|espaco)(?:\\s|$)/.test(normalized);
+}
+
 function normalizeName(value) {
   return String(value || '')
     .normalize('NFD')
@@ -271,7 +278,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onWhatsAp
       setFeedback('Este lead não possui um número de WhatsApp válido para abrir a conversa.');
       return;
     }
-    const message = renderMessage(template.message, { ...values, saudacao: getGreeting() });
+    const message = template.id === '01' && isInstitutionalLead(lead.name)\n      ? CLINIC_INITIAL_MESSAGE\n      : renderMessage(template.message, { ...values, saudacao: getGreeting() });
     if (!message) return;
     const whatsappWindow = window.open(withMessage(whatsappUrl, message), '_blank');
     if (whatsappWindow) whatsappWindow.opener = null;
