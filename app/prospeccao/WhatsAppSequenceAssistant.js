@@ -278,7 +278,9 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onWhatsAp
       setFeedback('Este lead não possui um número de WhatsApp válido para abrir a conversa.');
       return;
     }
-    const message = template.id === '01' && isInstitutionalLead(lead.name)\n      ? CLINIC_INITIAL_MESSAGE\n      : renderMessage(template.message, { ...values, saudacao: getGreeting() });
+    const message = template.id === '01' && isInstitutionalLead(lead.name)
+      ? CLINIC_INITIAL_MESSAGE
+      : renderMessage(template.message, { ...values, saudacao: getGreeting() });
     if (!message) return;
     const whatsappWindow = window.open(withMessage(whatsappUrl, message), '_blank');
     if (whatsappWindow) whatsappWindow.opener = null;
