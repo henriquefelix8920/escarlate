@@ -352,7 +352,6 @@ export default function ProspeccaoPage() {
         <a className="nav-item" href="#leads">◉ <span>Leads</span><b>{noSite.length}</b></a>
         <a className="nav-item nav-item-conversations" href="#whatsapp-pipeline">◷ <span>Conversas em andamento</span><b>{activeConversations.length}</b></a>
         <a className="nav-item" href="#captura">⌕ <span>Prospecção</span></a>
-        <Link className="nav-item" href="/radar-instagram">◎ <span>Radar Instagram</span></Link>
         <div className="sidebar-bottom"><span className="status-dot" /> CRM conectado</div>
       </aside>
 
@@ -438,15 +437,11 @@ export default function ProspeccaoPage() {
         </section>
 
         <section id="captura" className="capture-panel">
-          <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>{searchChannel === 'instagram' ? 'Encontre empresas cujo site cadastrado no Google Maps é o perfil do Instagram.' : 'Busque empresas locais que ainda não possuem site próprio.'}</p></div><span className="capture-icon">⌕</span></div>
-          <div className="search-channel-toggle" role="group" aria-label="Tipo de busca">
-            <button type="button" className={searchChannel === 'whatsapp' ? 'is-active whatsapp' : ''} onClick={() => setSearchChannel('whatsapp')}>☎ Buscar leads com WhatsApp</button>
-            <button type="button" className={searchChannel === 'instagram' ? 'is-active instagram' : ''} onClick={() => setSearchChannel('instagram')}>◎ Buscar leads com Instagram</button>
-          </div>
+          <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Encontre profissionais sem site próprio e descubra o Instagram público para você iniciar a conversa manualmente.</p></div><span className="capture-icon">⌕</span></div>
           <form onSubmit={startSearch} className="prospect-form">
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
             <label>Região / cidade<input value={city} onChange={(e) => setCity(capitalizeCity(e.target.value))} placeholder="Ex.: Minas Gerais ou Frutal, MG" minLength={2} required /></label>
-            <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : searchChannel === 'instagram' ? '◎ Buscar perfis no Instagram' : '⌕ Buscar leads com WhatsApp'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
+            <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '◎ Buscar leads com Instagram'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
           <div className="shared-job-heading"><strong>ACOMPANHAMENTO DA PESQUISA</strong><span>Sincronizado automaticamente entre seus aparelhos</span></div>
           {!job && <div className="job-status job-idle"><strong>Nenhuma pesquisa registrada</strong><span>Quando uma pesquisa for iniciada em qualquer aparelho, o andamento aparecerá aqui.</span></div>}
@@ -468,7 +463,7 @@ export default function ProspeccaoPage() {
             </> : <span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>}
             {job.found_count !== undefined && !jobProgress && <span>{job.found_count} novos leads salvos</span>}
           </div>}
-          <p className="prospect-hint">{searchChannel === 'instagram' ? 'Mantém perfis cujo site no Google Maps é o Instagram. Quando não há site informado, tenta localizar um perfil público indexado pelo nome, segmento e região. Sites próprios são descartados; confirme manualmente se o perfil pertence à profissional.' : 'Busca empresas sem site próprio e registra telefone quando disponível. Perfis sociais não são considerados sites próprios.'}</p>
+          <p className="prospect-hint">A busca começa pelo Google Maps. Se encontrar site institucional, o negócio é descartado. Se não houver site, procura um possível Instagram público pelo nome, segmento e cidade. Se o campo de site do Maps já apontar para o Instagram, o perfil também entra. Os resultados ficam em Leads sem site para você conferir e abordar manualmente.</p>
         </section>
 
         <section id="leads" className="leads-section">
@@ -482,7 +477,7 @@ export default function ProspeccaoPage() {
                 const wa = whatsapp(lead.phone);
                 const social = socialProfile(lead);
                 return <article id={'lead-' + lead.id} className="prospect-lead" key={lead.id}>
-                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (social ? 'has-social' : 'no-social')}>{social ? 'Sem site · com ' + social.label : 'Sem site · sem rede social'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa && <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onWhatsAppActivity={registerWhatsAppActivity} />}{social?.label === 'Instagram' && <InstagramAssistant lead={lead} profileUrl={social.url}  />}{!wa && social?.label !== 'Instagram' && <span className="no-phone">Nenhum canal de contato identificado</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (social ? 'has-social' : 'no-social')}>{social ? 'Sem site · com ' + social.label : 'Sem site · sem rede social'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{social?.label === 'Instagram' ? <InstagramAssistant lead={lead} profileUrl={social.url} /> : <span className="no-phone">Instagram ainda não localizado — confira o nome e a cidade antes de abordar.</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
                   <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
                 </article>;
               })
