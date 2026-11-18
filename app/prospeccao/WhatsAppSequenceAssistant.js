@@ -50,7 +50,7 @@ const CLINIC_INITIAL_MESSAGE = 'Olá! Tudo bem?\n\nSou o Henrique e trabalho com
 
 function isInstitutionalLead(value) {
   const normalized = normalizeName(value);
-  return /(?:^|\\s)(?:clinica|clinic|centro|instituto|hospital|consultorio|policlinica|laboratorio|unidade|grupo|rede|maternidade|espaco)(?:\\s|$)/.test(normalized);
+  return /(?:^|\s)(?:clinica|clinic|centro|instituto|hospital|consultorio|policlinica|laboratorio|unidade|grupo|rede|maternidade|espaco)(?:\s|$)/.test(normalized);
 }
 
 function normalizeName(value) {
