@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import './prospeccao.css';
 import WhatsAppSequenceAssistant from './WhatsAppSequenceAssistant';
-import InstagramAssistant from './InstagramAssistant';
 import { getMillisecondsUntilNextSaoPauloMidnight } from '@/lib/sao-paulo-date';
 
 const stages = [
@@ -49,19 +48,6 @@ const socialLabelForUrl = (value) => {
   return SOCIAL_PROFILE_LABELS.find(([domain]) => host === domain || host.endsWith('.' + domain))?.[1] || null;
 };
 
-const socialProfile = (lead) => {
-  const explicitUrl = String(lead.instagram || lead.profile || '').trim();
-  const websiteUrl = String(lead.website || '').trim();
-  // O Google Maps às vezes preenche o campo "site" com Instagram, WhatsApp
-  // ou um agregador de links. Isso não é um site próprio e deve ficar na fila.
-  const url = explicitUrl || (socialLabelForUrl(websiteUrl) ? websiteUrl : '');
-  if (!url) return null;
-  return {
-    url: url.startsWith('http') ? url : 'https://' + url,
-    label: socialLabelForUrl(url) || 'Perfil social',
-  };
-};
-
 const isSocialWebsite = (value) => Boolean(socialLabelForUrl(value));
 async function readJson(response) {
   const text = await response.text();
@@ -78,9 +64,8 @@ const whatsapp = (phone) => {
 
 export default function ProspeccaoPage() {
   const [city, setCity] = useState('');
-  const [category, setCategory] = useState('nutricionistas');
+  const [category, setCategory] = useState('médicas');
   const [limit] = useState(20);
-  const [searchChannel, setSearchChannel] = useState('instagram');
   const [leads, setLeads] = useState([]);
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -203,7 +188,7 @@ export default function ProspeccaoPage() {
     try {
       const response = await fetch('/api/search', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ city: capitalizeCity(city), category, limit: Number(limit), channel: searchChannel }),
+        body: JSON.stringify({ city: capitalizeCity(city), category: category.trim(), limit: Number(limit), channel: 'whatsapp' }),
       });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data.detail || data.error || 'Não foi possível iniciar a captura.');
@@ -325,21 +310,21 @@ export default function ProspeccaoPage() {
     : null;
   const jobLooksStalled = job?.status === 'running' && heartbeatAgeSeconds !== null && heartbeatAgeSeconds > 90;
 
-  const activeConversations = useMemo(() => leads.filter((lead) => lead.whatsapp_tracking_status === 'active' && !['won', 'lost'].includes(lead.status)), [leads]);
+  const activeConversations = useMemo(() => leads.filter((lead) => whatsapp(lead.phone) && lead.whatsapp_tracking_status === 'active' && !['won', 'lost'].includes(lead.status)), [leads]);
   const visibleConversations = useMemo(() => {
     const term = conversationQuery.trim().toLocaleLowerCase('pt-BR');
     if (!term) return activeConversations;
     return activeConversations.filter((lead) => [lead.name, lead.phone, lead.city, lead.address, lead.category, lead.whatsapp_last_message, lead.notes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(term));
   }, [activeConversations, conversationQuery]);
 
-  const instagramUncontacted = noSite.filter((lead) => lead.status === 'new' && socialProfile(lead)?.label === 'Instagram');
+  const whatsappUncontacted = noSite.filter((lead) => lead.status === 'new' && whatsapp(lead.phone));
 
   const visible = noSite.filter((lead) => {
     const matchesFilter = filter === 'all'
-      || (filter === 'pending' ? lead.status === 'new' : filter === 'instagram_uncontacted'
-        ? lead.status === 'new' && socialProfile(lead)?.label === 'Instagram'
+      || (filter === 'pending' ? lead.status === 'new' : filter === 'whatsapp_uncontacted'
+        ? lead.status === 'new' && Boolean(whatsapp(lead.phone))
         : lead.status === filter);
-    const text = [lead.name, lead.phone, lead.city, lead.address, lead.category, lead.instagram, lead.profile].filter(Boolean).join(' ').toLowerCase();
+    const text = [lead.name, lead.phone, lead.city, lead.address, lead.category].filter(Boolean).join(' ').toLowerCase();
     return matchesFilter && text.includes(query.toLowerCase());
   });
 
@@ -376,7 +361,7 @@ export default function ProspeccaoPage() {
         <section id="whatsapp-pipeline" className="whatsapp-pipeline-section">
           <div className="conversation-tab-heading">
             <div className="leads-heading">
-              <div><span className="eyebrow">ACOMPANHAMENTO DE CONTATOS</span><h2>Conversas em andamento</h2><p>Leads com uma abordagem preparada no WhatsApp ou Instagram para você retomar depois.</p></div>
+              <div><span className="eyebrow">ACOMPANHAMENTO DE CONTATOS</span><h2>Conversas em andamento</h2><p>Leads com uma abordagem preparada no WhatsApp para você retomar depois.</p></div>
               <span className="lead-total">{activeConversations.length} em andamento</span>
             </div>
             <button
@@ -394,35 +379,29 @@ export default function ProspeccaoPage() {
           <div className="conversation-toolbar"><label className="conversation-search"><span>⌕</span><input value={conversationQuery} onChange={(event) => setConversationQuery(event.target.value)} placeholder="Buscar conversa por nome, telefone ou empresa..." aria-label="Buscar conversas em andamento" /></label><span className="conversation-results">{visibleConversations.length} de {activeConversations.length}</span></div>
           <div className="whatsapp-pipeline-list">
             {activeConversations.length === 0
-              ? <div className="empty-crm">Nenhuma conversa iniciada ainda. Ao preparar a primeira mensagem pelo Assistente WhatsApp ou Instagram, o lead aparecerá aqui.</div>
+              ? <div className="empty-crm">Nenhuma conversa iniciada ainda. Ao abrir uma mensagem pelo Assistente WhatsApp, o lead aparecerá aqui.</div>
               : visibleConversations.length === 0
                 ? <div className="empty-crm">Nenhuma conversa em andamento corresponde a “{conversationQuery}”.</div>
                 : visibleConversations.map((lead) => {
                 const sent = Number(lead.whatsapp_messages_sent || 0);
                 const total = Math.max(1, Number(lead.whatsapp_total_messages || 4));
                 const percent = Math.min(100, Math.round((sent / total) * 100));
-                const isInstagramConversation = String(lead.whatsapp_last_message || '').startsWith('Instagram Direct');
-                const social = socialProfile(lead);
                 return <article className="whatsapp-pipeline-card" key={lead.id}>
                   <div className="whatsapp-pipeline-card-main">
                     <div className="lead-name-row"><h3>{lead.name}</h3><span className="stage-badge stage-contacted">Em andamento</span></div>
                     <p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p>
-                    <div className="whatsapp-pipeline-progress-label"><span>{isInstagramConversation ? 'Mensagem preparada no Instagram Direct' : `${sent} de ${total} mensagens abertas no WhatsApp`}</span><strong>{percent}%</strong></div>
+                    <div className="whatsapp-pipeline-progress-label"><span>{`${sent} de ${total} mensagens abertas no WhatsApp`}</span><strong>{percent}%</strong></div>
                     <div className="whatsapp-pipeline-progress"><span style={{ width: percent + '%' }} /></div>
                     <small>{lead.whatsapp_last_message || 'Primeira abordagem preparada'}{lead.whatsapp_last_message_at ? ' · ' + new Date(lead.whatsapp_last_message_at).toLocaleString('pt-BR') : ''}</small>
                   </div>
                   <div className="whatsapp-pipeline-actions">
-                    {isInstagramConversation && social?.label === 'Instagram'
-                      ? <InstagramAssistant lead={lead} profileUrl={social.url} onActivity={registerWhatsAppActivity} />
-                      : whatsapp(lead.phone)
-                      ? <WhatsAppSequenceAssistant
-                          lead={lead}
-                          whatsappUrl={whatsapp(lead.phone)}
-                          onWhatsAppActivity={registerWhatsAppActivity}
-                          triggerLabel="Abrir assistente"
-                          triggerClassName="whatsapp-pipeline-resume"
-                        />
-                      : <span className="no-phone">Telefone inválido para WhatsApp</span>}
+                    <WhatsAppSequenceAssistant
+                      lead={lead}
+                      whatsappUrl={whatsapp(lead.phone)}
+                      onWhatsAppActivity={registerWhatsAppActivity}
+                      triggerLabel="Abrir assistente"
+                      triggerClassName="whatsapp-pipeline-resume"
+                    />
                     <button type="button" className="whatsapp-pipeline-archive" onClick={() => {
                       registerWhatsAppActivity(lead.id, {
                         whatsapp_tracking_status: 'archived',
@@ -437,11 +416,11 @@ export default function ProspeccaoPage() {
         </section>
 
         <section id="captura" className="capture-panel">
-          <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Encontre profissionais sem site próprio e descubra o Instagram público para você iniciar a conversa manualmente.</p></div><span className="capture-icon">⌕</span></div>
+          <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Encontre profissionais sem site próprio e com telefone público para iniciar a conversa pelo WhatsApp.</p></div><span className="capture-icon">⌕</span></div>
           <form onSubmit={startSearch} className="prospect-form">
-            <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
-            <label>Região / cidade<input value={city} onChange={(e) => setCity(capitalizeCity(e.target.value))} placeholder="Ex.: Minas Gerais ou Frutal, MG" minLength={2} required /></label>
-            <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '◎ Buscar leads com Instagram'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
+            <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: médicas, nutricionistas" minLength={2} required /></label>
+            <label>Região / cidade<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex.: Minas Gerais ou Frutal, MG" minLength={2} required /></label>
+            <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '◎ Buscar leads com WhatsApp'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
           <div className="shared-job-heading"><strong>ACOMPANHAMENTO DA PESQUISA</strong><span>Sincronizado automaticamente entre seus aparelhos</span></div>
           {!job && <div className="job-status job-idle"><strong>Nenhuma pesquisa registrada</strong><span>Quando uma pesquisa for iniciada em qualquer aparelho, o andamento aparecerá aqui.</span></div>}
@@ -455,29 +434,28 @@ export default function ProspeccaoPage() {
                 <span><b>{jobProgress.scanned || 0}</b> analisadas de <b>{jobProgress.candidates || 0}</b> encontradas</span>
                 <span><b>{jobProgress.saved || 0}</b> leads salvos</span>
                 <span><b>{jobProgress.with_website || 0}</b> descartadas por já terem site</span>
-                <span><b>{jobProgress.with_social || 0}</b> com redes sociais (ainda sem site)</span>
-                <span><b>{jobProgress.with_instagram || 0}</b> com Instagram identificado</span>
+                <span><b>{jobProgress.with_whatsapp || 0}</b> com telefone para WhatsApp</span>
+                <span><b>{jobProgress.without_whatsapp || 0}</b> sem telefone válido</span>
                 <span><b>{jobProgress.duplicates || 0}</b> duplicadas</span>
                 <span><b>{jobProgress.errors || 0}</b> com erro</span>
               </div>
             </> : <span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>}
             {job.found_count !== undefined && !jobProgress && <span>{job.found_count} novos leads salvos</span>}
           </div>}
-          <p className="prospect-hint">A busca começa pelo Google Maps. Se encontrar site institucional, o negócio é descartado. Se não houver site, procura um possível Instagram público pelo nome, segmento e cidade. Se o campo de site do Maps já apontar para o Instagram, o perfil também entra. Os resultados ficam em Leads sem site para você conferir e abordar manualmente.</p>
+          <p className="prospect-hint">A busca começa pelo Google Maps e descarta negócios com site institucional. Só salva profissionais cujo telefone público tenha formato compatível com WhatsApp. O número vem do Google Maps; o sistema não consegue confirmar se ele possui WhatsApp ativo. Os resultados ficam em Leads sem site para você conferir e abordar manualmente.</p>
         </section>
 
         <section id="leads" className="leads-section">
           <div className="leads-heading"><div><span className="eyebrow">SEU FUNIL COMERCIAL</span><h2>Leads sem site</h2><p>Empresas que podem precisar de um site profissional.</p></div><span className="lead-total">{visible.length} exibidos</span></div>
           <div className="lead-toolbar"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="⌕  Buscar por empresa, telefone ou cidade..." /><div className="lead-filters">
-            {[['all','Todos'],['pending','Novos'],['instagram_uncontacted',`Instagram sem contato (${instagramUncontacted.length})`],['contacted','Contatados'],['follow_up','Follow-up'],['interested','Interessados'],['proposal','Propostas'],['won','Fechados'],['lost','Perdidos']].map(([value,label]) => <button key={value} className={filter === value ? 'filter-active' : ''} onClick={() => setFilter(value)}>{label}</button>)}
+            {[['all','Todos'],['pending','Novos'],['whatsapp_uncontacted',`WhatsApp sem contato (${whatsappUncontacted.length})`],['contacted','Contatados'],['follow_up','Follow-up'],['interested','Interessados'],['proposal','Propostas'],['won','Fechados'],['lost','Perdidos']].map(([value,label]) => <button key={value} className={filter === value ? 'filter-active' : ''} onClick={() => setFilter(value)}>{label}</button>)}
           </div></div>
           <div className="lead-list">
             {visible.length === 0 ? <div className="empty-crm">{noSite.length ? 'Nenhum lead corresponde a esse filtro.' : 'Ainda não há leads sem site. Faça uma pesquisa acima para encontrar oportunidades.'}</div> :
               visible.map((lead) => {
                 const wa = whatsapp(lead.phone);
-                const social = socialProfile(lead);
                 return <article id={'lead-' + lead.id} className="prospect-lead" key={lead.id}>
-                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (social ? 'has-social' : 'no-social')}>{social ? 'Sem site · com ' + social.label : 'Sem site · sem rede social'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}{social && <a href={social.url} target="_blank" rel="noreferrer">{social.label} ↗</a>}</div><div className="lead-actions">{wa && <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onWhatsAppActivity={registerWhatsAppActivity} triggerLabel="Assistente WhatsApp" />} {social?.label === 'Instagram' && <InstagramAssistant lead={lead} profileUrl={social.url} onActivity={registerWhatsAppActivity} />} {!wa && social?.label !== 'Instagram' && <span className="no-phone">Sem WhatsApp válido ou Instagram localizado — confira os dados antes de abordar.</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (wa ? 'has-social' : 'no-social')}>{wa ? 'Sem site · com WhatsApp' : 'Sem site · sem WhatsApp válido'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}</div><div className="lead-actions">{wa && <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onWhatsAppActivity={registerWhatsAppActivity} triggerLabel="Assistente WhatsApp" />} {!wa && <span className="no-phone">Sem número válido para abrir no WhatsApp.</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
                   <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
                 </article>;
               })
