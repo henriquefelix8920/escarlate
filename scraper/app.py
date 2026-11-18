@@ -86,7 +86,7 @@ async def find_public_instagram_profile(page, name: str, city: str, category: st
             )
         except Exception:
             result_text = await anchor.inner_text()
-        normalized_text = re.sub(r"\\s+", " ", result_text or "").lower()
+        normalized_text = re.sub(r"\s+", " ", result_text or "").lower()
         if name_tokens and not any(token in normalized_text for token in name_tokens):
             continue
         return profile
