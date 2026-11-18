@@ -149,11 +149,19 @@ async def recover_interrupted_jobs():
                     saved_message = json.loads(row.get("message") or "{}")
                 except Exception:
                     saved_message = {}
-                data = SearchRequest(
-                    city=row["city"], category=row["term"], limit=row["requested_limit"],
-                    channel=saved_message.get("channel", "whatsapp")
-                )
-                asyncio.create_task(run_search(job_id, data))
+                if saved_message.get("kind") == "instagram_discovery":
+                    discovery_data = InstagramDiscoveryRequest(
+                        region=saved_message.get("region") or row.get("city") or "Brasil",
+                        category=saved_message.get("category") or "nutricionista",
+                        limit=row.get("requested_limit") or 25,
+                    )
+                    asyncio.create_task(run_instagram_discovery(job_id, discovery_data))
+                else:
+                    data = SearchRequest(
+                        city=row["city"], category=row["term"], limit=row["requested_limit"],
+                        channel=saved_message.get("channel", "whatsapp")
+                    )
+                    asyncio.create_task(run_search(job_id, data))
                 recovered = True
             else:
                 # O Escarlate executa uma busca global por vez. Evita enfileirar
@@ -576,7 +584,7 @@ async def start_instagram_discovery(data: InstagramDiscoveryRequest, background:
     return {"id": job_id, "status": "queued"}
 
 
-async def run_instagram_discovery(job_id: str, data: InstagramDiscoveryRequest):
+async def _run_instagram_discovery(job_id: str, data: InstagramDiscoveryRequest):
     client = db()
     browser = None
     progress = {"version": 1, "phase": "starting", "detail": "Preparando descoberta de perfis públicos indexados…", "scanned": 0, "candidates": 0, "duplicates": 0, "errors": 0, "saved": 0}
@@ -681,6 +689,11 @@ async def run_instagram_discovery(job_id: str, data: InstagramDiscoveryRequest):
         if browser:
             try: await browser.close()
             except Exception: pass
+
+
+async def run_instagram_discovery(job_id: str, data: InstagramDiscoveryRequest):
+    async with SEARCH_LOCK:
+        await _run_instagram_discovery(job_id, data)
 
 
 class InstagramSearchRequest(BaseModel):
