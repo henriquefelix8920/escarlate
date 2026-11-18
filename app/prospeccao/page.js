@@ -78,7 +78,7 @@ const whatsapp = (phone) => {
 
 export default function ProspeccaoPage() {
   const [city, setCity] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState('nutricionistas');
   const [limit] = useState(20);
   const [searchChannel, setSearchChannel] = useState('whatsapp');
   const [leads, setLeads] = useState([]);
@@ -445,7 +445,7 @@ export default function ProspeccaoPage() {
           </div>
           <form onSubmit={startSearch} className="prospect-form">
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: clínicas odontológicas" minLength={2} required /></label>
-            <label>Cidade<input value={city} onChange={(e) => setCity(capitalizeCity(e.target.value))} placeholder="Ex.: Frutal, MG" minLength={2} required /></label>
+            <label>Região / cidade<input value={city} onChange={(e) => setCity(capitalizeCity(e.target.value))} placeholder="Ex.: Minas Gerais ou Frutal, MG" minLength={2} required /></label>
             <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : searchChannel === 'instagram' ? '◎ Buscar perfis no Instagram' : '⌕ Buscar leads com WhatsApp'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
           <div className="shared-job-heading"><strong>ACOMPANHAMENTO DA PESQUISA</strong><span>Sincronizado automaticamente entre seus aparelhos</span></div>
@@ -468,7 +468,7 @@ export default function ProspeccaoPage() {
             </> : <span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>}
             {job.found_count !== undefined && !jobProgress && <span>{job.found_count} novos leads salvos</span>}
           </div>}
-          <p className="prospect-hint">{searchChannel === 'instagram' ? 'Busca somente empresas cujo campo de site no Google Maps aponta diretamente para instagram.com. Outros sites e redes sociais são descartados.' : 'Busca empresas sem site próprio e registra telefone quando disponível. Perfis sociais não são considerados sites próprios.'}</p>
+          <p className="prospect-hint">{searchChannel === 'instagram' ? 'Mantém perfis cujo site no Google Maps é o Instagram. Quando não há site informado, tenta localizar um perfil público indexado pelo nome, segmento e região. Sites próprios são descartados; confirme manualmente se o perfil pertence à profissional.' : 'Busca empresas sem site próprio e registra telefone quando disponível. Perfis sociais não são considerados sites próprios.'}</p>
         </section>
 
         <section id="leads" className="leads-section">
