@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { WHATSAPP_MESSAGE_BUTTONS, WHATSAPP_MESSAGE_CATEGORIES } from './whatsapp-message-buttons';
+import { WHATSAPP_MESSAGE_BUTTONS } from './whatsapp-message-buttons';
 
 const SEQUENCES_KEY = 'escarlate:whatsapp-sequences:v1';
 const PROGRESS_KEY = 'escarlate:whatsapp-sequence-progress:v1';
@@ -163,9 +163,7 @@ export default function WhatsAppSequenceAssistant({ lead, whatsappUrl, onWhatsAp
   const [contactTreatment, setContactTreatment] = useState(initialContact.treatment);
   const [draft, setDraft] = useState(null);
   const [feedback, setFeedback] = useState('');
-  const [followUpAwaitingConfirmation, setFollowUpAwaitingConfirmation] = useState(false);
   const [followUpFeedback, setFollowUpFeedback] = useState('');
-  const [selectedButtonCategory, setSelectedButtonCategory] = useState(WHATSAPP_MESSAGE_CATEGORIES[0]);
 
   useEffect(() => {
     try {
@@ -364,7 +362,7 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
     }
   }
 
-  function openFollowUpInWhatsApp() {
+  async function openFollowUpInWhatsApp() {
     if (!whatsappUrl) {
       setFollowUpFeedback('Este lead não possui um número de WhatsApp válido.');
       return;
@@ -375,11 +373,11 @@ A ideia é criar um site com a sua identidade, que valorize o seu trabalho e tra
     const greeting = displayName ? `Olá, ${displayName}! Tudo bem? 😊` : 'Olá! Tudo bem? 😊';
     const message = `${greeting}
 
-Estou retomando nossa conversa porque acredito que um site profissional pode valorizar a forma como você apresenta seu trabalho, transmitir confiança logo no primeiro contato e facilitar que novos clientes encontrem seus serviços e falem diretamente com você.
+Estou retomando nossa conversa porque acredito que um site profissional pode valorizar a forma como você apresenta seu trabalho, transmitir confiança logo no primeiro contato e facilitar que novos pacientes encontrem seus serviços e falem diretamente com você.
 
-A ideia é criar algo com a sua identidade, reunindo suas informações, serviços e formas de contato em um só lugar — de um jeito simples e pensado para o seu negócio.
+A ideia é criar algo com a sua identidade, reunindo suas informações, especialidades, serviços e formas de contato em um só lugar.
 
-Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para você? É sem compromisso e levo só um instante para te apresentar. 😊`;
+Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para você? É sem compromisso. 😊`;
 
     const whatsappWindow = window.open('about:blank', '_blank');
     if (!whatsappWindow) {
@@ -389,23 +387,17 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
 
     whatsappWindow.location.href = withMessage(whatsappUrl, message);
     whatsappWindow.opener = null;
-    if (onWhatsAppActivity) {
-      onWhatsAppActivity(lead.id, {
-        whatsapp_tracking_status: 'active',
-        whatsapp_last_message: 'Follow-up preparado',
-        whatsapp_last_message_at: new Date().toISOString(),
-      }).catch((error) => setFollowUpFeedback(`Mensagem aberta, mas não consegui atualizar o painel: ${error.message}`));
-    }
-    setFollowUpAwaitingConfirmation(true);
-    setFollowUpFeedback('Mensagem preparada no WhatsApp. Confira o texto e toque em Enviar; depois confirme aqui no CRM.');
-  }
-
-  async function confirmFollowUpSent() {
     try {
-      setFollowUpAwaitingConfirmation(false);
-      setFollowUpFeedback('Follow-up confirmado no assistente. A etapa comercial continua sob seu controle no funil.');
+      if (onWhatsAppActivity) {
+        await onWhatsAppActivity(lead.id, {
+          whatsapp_tracking_status: 'archived',
+          whatsapp_last_message: 'Follow-up preparado — conversa arquivada automaticamente',
+          whatsapp_last_message_at: new Date().toISOString(),
+        });
+      }
+      setFollowUpFeedback('Follow-up aberto no WhatsApp e conversa arquivada automaticamente no CRM. Revise e envie manualmente.');
     } catch (error) {
-      setFollowUpFeedback(`Não consegui registrar o follow-up: ${error.message}. Tente novamente.`);
+      setFollowUpFeedback(`Mensagem aberta, mas não consegui arquivar a conversa no CRM: ${error.message}`);
     }
   }
 
@@ -518,7 +510,7 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
         <span className="whatsapp-assistant-icon" aria-hidden="true">◉</span>
         <span className="whatsapp-assistant-copy">
           <strong>{triggerLabel}</strong>
-          <small>24 botões de mensagens</small>
+          <small>4 mensagens prontas</small>
         </span>
       </button>
 
@@ -531,11 +523,6 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
               <small>Retomar conversa · 24h sem resposta</small>
             </span>
           </button>
-          {followUpAwaitingConfirmation && (
-            <button type="button" className="followup-confirm-action" onClick={confirmFollowUpSent}>
-              Já enviei — registrar contato
-            </button>
-          )}
           {followUpFeedback && <small className="followup-feedback" role="status">{followUpFeedback}</small>}
         </div>
       )}
@@ -556,17 +543,8 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
 
             {screen === 'buttons' && (
               <div className="wa-message-buttons-screen">
-                <div className="wa-sequence-toolbar">
-                  <label>Categoria de mensagens
-                    <select value={selectedButtonCategory} onChange={(event) => setSelectedButtonCategory(event.target.value)}>
-                      {WHATSAPP_MESSAGE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
-                    </select>
-                  </label>
-                  <button type="button" className="wa-sequence-secondary" onClick={() => setScreen('flow')}>Roteiros personalizados</button>
-                </div>
-
                 <div className="wa-message-button-list">
-                  {WHATSAPP_MESSAGE_BUTTONS.filter((item) => item.category === selectedButtonCategory).map((item) => (
+                  {WHATSAPP_MESSAGE_BUTTONS.map((item) => (
                     <article className="wa-message-button-card" key={item.id}>
                       <div className="wa-message-button-copy">
                         <span className="wa-message-button-number">BOTÃO {item.id}</span>
@@ -579,7 +557,7 @@ Faz sentido eu te mostrar um exemplo visual de como isso poderia ficar para voc�
                 </div>
 
                 <div className="wa-sequence-footer">
-                  <p>Ao clicar em um botão, o Escarlate abre a mensagem no WhatsApp e registra automaticamente a abordagem no painel — sem precisar voltar para confirmar. Você ainda revisa e toca em Enviar manualmente. O WhatsApp não permite que o Escarlate confirme se a mensagem foi realmente enviada.</p>
+                  <p>São quatro mensagens prontas para situações diferentes. Ao clicar, o Escarlate abre o WhatsApp com o texto preenchido; revise e toque em Enviar manualmente. O WhatsApp não informa ao Escarlate se a mensagem foi realmente enviada.</p>
                 </div>
               </div>
             )}
