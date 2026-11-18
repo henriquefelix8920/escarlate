@@ -29,7 +29,7 @@ export async function POST(request) {
     const response = await fetch(`${base}/api/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, channel: 'whatsapp' }),
       cache: 'no-store',
     });
     const payload = await readJsonResponse(response);
