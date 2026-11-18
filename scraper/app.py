@@ -38,6 +38,52 @@ class SearchRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=100)
     channel: Literal['whatsapp', 'instagram'] = 'whatsapp'
 
+
+def normalize_instagram_profile_url(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw if "://" in raw else "https://" + raw)
+    if parsed.hostname and parsed.hostname.lower().endswith("google.com"):
+        params = parse_qs(parsed.query)
+        raw = unquote((params.get("q") or params.get("url") or [""])[0])
+        parsed = urlparse(raw if "://" in raw else "https://" + raw)
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    if host != "instagram.com" and not host.endswith(".instagram.com"):
+        return ""
+    parts = [part for part in parsed.path.split("/") if part]
+    if not parts or parts[0].lower() in {"p", "reel", "reels", "stories", "explore", "accounts", "direct"} or len(parts) > 1:
+        return ""
+    username = re.sub(r"[^A-Za-z0-9._]", "", parts[0]).strip(".")
+    return f"https://www.instagram.com/{username}/" if username else ""
+
+
+async def find_public_instagram_profile(page, name: str, city: str, category: str) -> str:
+    query = f'site:instagram.com/ "{name}" "{city}" "{category}" -inurl:/p/ -inurl:/reel/ -inurl:/stories/'
+    await page.goto("https://www.google.com/search?q=" + quote(query), wait_until="domcontentloaded", timeout=25000)
+    await page.wait_for_timeout(500)
+    anchors = await page.locator('a[href*="instagram.com"]').all()
+    name_tokens = [
+        token.lower() for token in re.findall(r"[A-Za-zÀ-ÿ]{3,}", name)
+        if token.lower() not in {"nutricionista", "nutricionistas", "clinica", "clínica", "consultorio", "consultório"}
+    ]
+    for anchor in anchors[:30]:
+        profile = normalize_instagram_profile_url(await anchor.get_attribute("href") or "")
+        if not profile:
+            continue
+        try:
+            result_text = await anchor.evaluate(
+                "el => (el.closest('div.MjjYud') || el.parentElement?.parentElement || el).innerText || ''"
+            )
+        except Exception:
+            result_text = await anchor.inner_text()
+        normalized_text = re.sub(r"\s+", " ", result_text or "").lower()
+        if name_tokens and not any(token in normalized_text for token in name_tokens):
+            continue
+        return profile
+    return ""
+
+
 def digits(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
@@ -455,14 +501,28 @@ async def _run_search(job_id: str, data: SearchRequest):
     
                         social_network, social_url = classify_social_url(website)
                         if data.channel == "instagram" and social_network != "instagram":
-                            progress["scanned"] += 1
-                            report_progress(detail=f"Analisando: {name[:70]} — descartada porque não informa perfil do Instagram no site do Google Maps.")
-                            continue
-                        if website.strip() and not social_network:
-                            progress["with_website"] += 1
-                            progress["scanned"] += 1
-                            report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site institucional.")
-                            continue
+                            if website.strip() and not social_network:
+                                progress["with_website"] += 1
+                                progress["scanned"] += 1
+                                report_progress(detail=f"Analisando: {name[:70]} — descartada porque já tem site próprio.")
+                                continue
+                            report_progress(detail=f"Analisando: {name[:70]} — sem Instagram no Maps; procurando perfil público…")
+                            try:
+                                public_profile = await find_public_instagram_profile(page, name, data.city, data.category)
+                            except Exception as lookup_exc:
+                                public_profile = ""
+                                print(f"Busca pública de Instagram falhou para {name[:70]}: {type(lookup_exc).__name__}: {str(lookup_exc)[:180]}", flush=True)
+                            if not public_profile:
+                                progress["scanned"] += 1
+                                report_progress(detail=f"Analisando: {name[:70]} — nenhum perfil público correspondente foi encontrado.")
+                                continue
+                            social_network, social_url = "instagram", public_profile
+                        elif data.channel == "instagram":
+                            social_url = normalize_instagram_profile_url(social_url or website)
+                            if not social_url:
+                                progress["scanned"] += 1
+                                report_progress(detail=f"Analisando: {name[:70]} — link do Instagram não corresponde a um perfil.")
+                                continue
 
                         if social_network:
                             progress["with_social"] += 1
