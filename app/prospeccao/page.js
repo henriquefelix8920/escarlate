@@ -80,7 +80,7 @@ export default function ProspeccaoPage() {
   const [city, setCity] = useState('');
   const [category, setCategory] = useState('nutricionistas');
   const [limit] = useState(20);
-  const [searchChannel, setSearchChannel] = useState('whatsapp');
+  const [searchChannel, setSearchChannel] = useState('instagram');
   const [leads, setLeads] = useState([]);
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(false);
