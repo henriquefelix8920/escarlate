@@ -653,7 +653,7 @@ async def _run_instagram_discovery(job_id: str, data: InstagramDiscoveryRequest)
                         progress["duplicates"] += 1
                         report(detail=f"@{username} já está no Radar.")
                         continue
-                    snippet = re.sub(r"\\s+", " ", candidate["snippet"]).strip()[:1800]
+                    snippet = re.sub(r"\s+", " ", candidate["snippet"]).strip()[:1800]
                     row = {
                         "name": username.replace(".", " ").replace("_", " ").title()[:180],
                         "username": username[:80], "instagram_url": candidate["url"],
