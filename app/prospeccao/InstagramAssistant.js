@@ -11,7 +11,7 @@ function contactValues(lead) {
   return {
     nome: cleaned || raw,
     primeiro_nome: (cleaned || raw).split(/\s+/)[0] || '',
-    tratamento: '',
+    tratamento: /^\s*dr\.?\s/i.test(raw) ? 'Dr.' : 'Dra.',
     cidade: lead?.city || '',
     categoria: lead?.category || '',
     saudacao: 'Olá',
