@@ -1,17 +1,10 @@
 export const WHATSAPP_MESSAGE_BUTTONS = [
   {
-    id: '00',
-    category: 'Abordagem personalizada',
-    title: 'Abordagem exclusiva para este consultório',
-    description: 'Mensagem montada com o nome, segmento, cidade e presença digital identificados neste lead.',
-    message: 'Olá, {tratamento} {primeiro_nome}! Tudo bem? 😊\n\nSou Henrique, desenvolvedor web. Encontrei seu perfil ao pesquisar por {categoria} em {cidade}.\n\n{observacao}\n\nTenho desenvolvido sites profissionais para médicas e consultórios, com apresentação das especialidades, informações de atendimento e caminhos claros para pacientes solicitarem informações ou agendarem.\n\nPensei em uma ideia que pode valorizar a apresentação do seu trabalho. Posso te mostrar uma referência visual, sem compromisso?',
-  },
-  {
     id: '01',
     category: 'Primeiro contato',
     title: 'Primeiro contato',
     description: 'Nova lead; envie uma única vez e aguarde a resposta.',
-    message: 'Olá, {tratamento} {primeiro_nome}! Tudo bem? 😊\n\nMeu nome é Henrique. Estava pesquisando médicas em {cidade} pelo Google e encontrei seu perfil.\n\nTrabalho ajudando profissionais a fortalecerem sua presença no Google, facilitando que pessoas que procuram por seus serviços encontrem e conheçam seu trabalho.\n\nPercebi uma oportunidade interessante no seu perfil e gostaria de te mostrar uma ideia. Posso?',
+    message: 'Olá, {tratamento} {primeiro_nome}! Tudo bem? 😊\n\nMeu nome é Henrique. Estava pesquisando nutricionistas em {cidade} pelo Google e encontrei seu perfil.\n\nTrabalho ajudando profissionais a fortalecerem sua presença no Google, facilitando que pessoas que procuram por seus serviços encontrem e conheçam seu trabalho.\n\nPercebi uma oportunidade interessante no seu perfil e gostaria de te mostrar uma ideia. Posso?',
   },
   {
     id: '02',
@@ -25,7 +18,7 @@ export const WHATSAPP_MESSAGE_BUTTONS = [
     category: 'Primeiro contato',
     title: 'Apresentar demonstração',
     description: 'Quando ela autorizar você a mostrar o exemplo.',
-    message: 'Que bom, {primeiro_nome}! 😊\n\nPosso te apresentar uma referência visual de site pensada para médicas e consultórios.\n\nA estrutura seria personalizada com sua identidade visual, suas informações profissionais, especialidades, serviços, fotos e canais de contato.\n\nA ideia é ter um espaço profissional próprio na internet, onde pacientes possam conhecer melhor seu trabalho.\n\nSe quiser, te envio a referência para você avaliar. O que acha?',
+    message: 'Que bom, {primeiro_nome}! 😊\n\nPreparei uma demonstração de site pensada especialmente para profissionais da nutrição.\n\nDá uma olhadinha:\n\nhttps://nutricionista-fawn.vercel.app/\n\nImagine uma estrutura assim, mas totalmente personalizada com sua identidade visual, suas informações, especialidades, serviços, fotos e canais de contato.\n\nA ideia é ter um espaço profissional próprio na internet, onde as pessoas possam conhecer melhor seu trabalho.\n\nO que achou da proposta visual?',
   },
   {
     id: '04',
@@ -46,7 +39,7 @@ export const WHATSAPP_MESSAGE_BUTTONS = [
     category: 'Apresentação da solução',
     title: 'Apresentar benefícios',
     description: 'Quando ela perguntar por que deveria investir nessa estrutura.',
-    message: 'O principal benefício é construir uma presença profissional que trabalhe a seu favor na internet.\n\nImagine uma pessoa pesquisando por uma médica na sua região.\n\nEla encontra seu perfil no Google, conhece um pouco mais sobre sua atuação, acessa seu site, visualiza suas especialidades e encontra uma maneira fácil de entrar em contato.\n\nEm vez de depender exclusivamente das redes sociais ou de indicações, você passa a contar com mais um canal para apresentar seu trabalho e receber oportunidades.\n\nÉ essa estrutura que quero ajudar você a construir. 😊',
+    message: 'O principal benefício é construir uma presença profissional que trabalhe a seu favor na internet.\n\nImagine uma pessoa pesquisando por uma nutricionista na sua região.\n\nEla encontra seu perfil no Google, conhece um pouco mais sobre sua atuação, acessa seu site, visualiza suas especialidades e encontra uma maneira fácil de entrar em contato.\n\nEm vez de depender exclusivamente das redes sociais ou de indicações, você passa a contar com mais um canal para apresentar seu trabalho e receber oportunidades.\n\nÉ essa estrutura que quero ajudar você a construir. 😊',
   },
   {
     id: '07',
@@ -95,7 +88,7 @@ export const WHATSAPP_MESSAGE_BUTTONS = [
     category: 'Quebra de objeções',
     title: 'Já tenho Instagram',
     description: 'Quando ela disser que já divulga o trabalho no Instagram.',
-    message: 'Que ótimo, {primeiro_nome}! O Instagram é uma ferramenta muito interessante para divulgar seu trabalho.\n\nA proposta não é substituir suas redes sociais, mas complementar sua presença digital.\n\nO Google permite que pessoas que estão procurando por uma médica encontrem seu perfil, enquanto o site oferece um espaço próprio para conhecer melhor seus serviços e entrar em contato.\n\nSão ferramentas diferentes que podem trabalhar juntas. 😊',
+    message: 'Que ótimo, {primeiro_nome}! O Instagram é uma ferramenta muito interessante para divulgar seu trabalho.\n\nA proposta não é substituir suas redes sociais, mas complementar sua presença digital.\n\nO Google permite que pessoas que estão procurando por uma nutricionista encontrem seu perfil, enquanto o site oferece um espaço próprio para conhecer melhor seus serviços e entrar em contato.\n\nSão ferramentas diferentes que podem trabalhar juntas. 😊',
   },
   {
     id: '14',
@@ -144,7 +137,7 @@ export const WHATSAPP_MESSAGE_BUTTONS = [
     category: 'Follow-up',
     title: 'Follow-up 2 · mais 3 dias',
     description: 'Segundo acompanhamento; use apenas se ainda não houver resposta.',
-    message: '{primeiro_nome}, gostaria de destacar uma coisa:\n\nHoje, quando alguém pesquisa por uma médica, ter informações profissionais organizadas, uma boa apresentação e canais de contato acessíveis pode fazer diferença na experiência dessa pessoa.\n\nÉ justamente nisso que trabalho: construir uma presença digital profissional, com Google Maps e site trabalhando juntos.\n\nSe esse for um projeto que você pretende desenvolver, ficarei feliz em conversar com você! 😊',
+    message: '{primeiro_nome}, gostaria de destacar uma coisa:\n\nHoje, quando alguém pesquisa por uma nutricionista, ter informações profissionais organizadas, uma boa apresentação e canais de contato acessíveis pode fazer diferença na experiência dessa pessoa.\n\nÉ justamente nisso que trabalho: construir uma presença digital profissional, com Google Maps e site trabalhando juntos.\n\nSe esse for um projeto que você pretende desenvolver, ficarei feliz em conversar com você! 😊',
   },
   {
     id: '21',
