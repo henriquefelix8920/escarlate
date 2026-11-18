@@ -186,6 +186,7 @@ async def extract_maps_website(page) -> str:
 
 SOCIAL_HOSTS = {
     "instagram.com": "instagram",
+    "doctoralia.com.br": "doctoralia", "doctoralia.com": "doctoralia",
     "facebook.com": "facebook", "fb.com": "facebook",
     "tiktok.com": "tiktok",
     "linkedin.com": "linkedin",
