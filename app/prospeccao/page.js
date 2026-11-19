@@ -55,7 +55,8 @@ async function readJson(response) {
   try { return JSON.parse(text); }
   catch { throw new Error(`O servidor retornou uma resposta inválida (HTTP ${response.status}). Tente novamente.`); }
 }
-const whatsapp = (phone) => {
+const whatsapp = (phone, verificationStatus) => {
+  if (verificationStatus === 'not_whatsapp') return null;
   let value = digits(phone);
   if (value.startsWith('55') && value.length === 13) value = value.slice(2);
   // Only Brazilian mobile numbers (DDD + 9 + eight digits) are eligible.
@@ -311,19 +312,19 @@ export default function ProspeccaoPage() {
     : null;
   const jobLooksStalled = job?.status === 'running' && heartbeatAgeSeconds !== null && heartbeatAgeSeconds > 90;
 
-  const activeConversations = useMemo(() => leads.filter((lead) => whatsapp(lead.phone) && lead.whatsapp_tracking_status === 'active' && !['won', 'lost'].includes(lead.status)), [leads]);
+  const activeConversations = useMemo(() => leads.filter((lead) => whatsapp(lead.phone, lead.whatsapp_number_status) && lead.whatsapp_tracking_status === 'active' && !['won', 'lost'].includes(lead.status)), [leads]);
   const visibleConversations = useMemo(() => {
     const term = conversationQuery.trim().toLocaleLowerCase('pt-BR');
     if (!term) return activeConversations;
     return activeConversations.filter((lead) => [lead.name, lead.phone, lead.city, lead.address, lead.category, lead.whatsapp_last_message, lead.notes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(term));
   }, [activeConversations, conversationQuery]);
 
-  const whatsappUncontacted = noSite.filter((lead) => lead.status === 'new' && whatsapp(lead.phone));
+  const whatsappUncontacted = noSite.filter((lead) => lead.status === 'new' && whatsapp(lead.phone, lead.whatsapp_number_status));
 
   const visible = noSite.filter((lead) => {
     const matchesFilter = filter === 'all'
       || (filter === 'pending' ? lead.status === 'new' : filter === 'whatsapp_uncontacted'
-        ? lead.status === 'new' && Boolean(whatsapp(lead.phone))
+        ? lead.status === 'new' && Boolean(whatsapp(lead.phone, lead.whatsapp_number_status))
         : lead.status === filter);
     const text = [lead.name, lead.phone, lead.city, lead.address, lead.category].filter(Boolean).join(' ').toLowerCase();
     return matchesFilter && text.includes(query.toLowerCase());
@@ -398,7 +399,7 @@ export default function ProspeccaoPage() {
                   <div className="whatsapp-pipeline-actions">
                     <WhatsAppSequenceAssistant
                       lead={lead}
-                      whatsappUrl={whatsapp(lead.phone)}
+                      whatsappUrl={whatsapp(lead.phone, lead.whatsapp_number_status)}
                       onWhatsAppActivity={registerWhatsAppActivity}
                       triggerLabel="Abrir assistente"
                       triggerClassName="whatsapp-pipeline-resume"
@@ -454,7 +455,7 @@ export default function ProspeccaoPage() {
           <div className="lead-list">
             {visible.length === 0 ? <div className="empty-crm">{noSite.length ? 'Nenhum lead corresponde a esse filtro.' : 'Ainda não há leads sem site. Faça uma pesquisa acima para encontrar oportunidades.'}</div> :
               visible.map((lead) => {
-                const wa = whatsapp(lead.phone);
+                const wa = whatsapp(lead.phone, lead.whatsapp_number_status);
                 return <article id={'lead-' + lead.id} className="prospect-lead" key={lead.id}>
                   <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (wa ? 'has-social' : 'no-social')}>{wa ? (lead.whatsapp_number_status === 'confirmed' ? 'WhatsApp confirmado' : 'Celular · WhatsApp não verificado') : 'Sem site · sem celular válido'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}</div><div className="lead-actions">{wa && <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onWhatsAppActivity={registerWhatsAppActivity} triggerLabel={lead.whatsapp_number_status === 'confirmed' ? 'Assistente WhatsApp' : 'Abrir WhatsApp para conferir'} />}
                     {wa && lead.whatsapp_number_status !== 'confirmed' && <><button type="button" className="whatsapp-verify-action" disabled={!!saving[lead.id]} onClick={() => updateLead(lead.id, { whatsapp_number_status: 'confirmed' })}>Confirmar WhatsApp</button><button type="button" className="whatsapp-invalid-action" disabled={!!saving[lead.id]} onClick={() => updateLead(lead.id, { whatsapp_number_status: 'not_whatsapp' })}>Não é WhatsApp</button></>}
