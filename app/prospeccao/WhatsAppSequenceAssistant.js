@@ -46,7 +46,7 @@ function getGreeting() {
   return 'Boa noite';
 }
 
-const CLINIC_INITIAL_MESSAGE = 'Olá! Tudo bem?\n\nSou o Henrique e trabalho com desenvolvimento de sites para clínicas e empresas da área da saúde.\n\nVi o perfil de vocês no Google e gostaria de apresentar uma ideia: um site profissional pode ajudar a apresentar a estrutura, os profissionais, as especialidades e os serviços oferecidos, além de facilitar o contato de novos pacientes.\n\nAcredito que isso pode fortalecer a presença do estabelecimento na internet e transmitir ainda mais confiança para quem procura atendimento.\n\nPosso mostrar um exemplo de como ficaria?';
+const CLINIC_INITIAL_MESSAGE = 'Olá! Tudo bem?\n\nSou o Henrique e trabalho com desenvolvimento de sites para clínicas e empresas da área da saúde.\n\nVi o perfil de vocês no Google e gostaria de apresentar uma ideia: um site profissional pode ajudar a apresentar a estrutura, os profissionais, as especialidades e os serviços oferecidos, além de facilitar o contato de novos pacientes.\n\nAcredito que isso pode fortalecer a presença do estabelecimento na internet e transmitir ainda mais confiança para quem procura atendimento.';
 
 function isInstitutionalLead(value) {
   const normalized = normalizeName(value);
