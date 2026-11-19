@@ -5,10 +5,11 @@ export const runtime = 'nodejs';
 export async function PATCH(request, { params }) {
   try {
     const body = await request.json();
-    const allowed = ['status', 'notes', 'name', 'phone', 'email', 'website', 'instagram', 'deal_value', 'whatsapp_tracking_status', 'whatsapp_messages_sent', 'whatsapp_total_messages', 'whatsapp_last_message', 'whatsapp_last_message_at', 'whatsapp_started_at'];
+    const allowed = ['status', 'notes', 'name', 'phone', 'email', 'website', 'instagram', 'deal_value', 'whatsapp_number_status', 'whatsapp_tracking_status', 'whatsapp_messages_sent', 'whatsapp_total_messages', 'whatsapp_last_message', 'whatsapp_last_message_at', 'whatsapp_started_at'];
     const update = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
     if (!Object.keys(update).length) return NextResponse.json({ error: 'Nenhum campo válido para atualizar.' }, { status: 400 });
     if (update.status && !['new','contacted','follow_up','interested','proposal','won','lost'].includes(update.status)) return NextResponse.json({ error: 'Etapa comercial inválida.' }, { status: 400 });
+    if (Object.prototype.hasOwnProperty.call(update, 'whatsapp_number_status') && !['unverified', 'confirmed', 'not_whatsapp'].includes(update.whatsapp_number_status)) return NextResponse.json({ error: 'Status de verificação do WhatsApp inválido.' }, { status: 400 });
     if (Object.prototype.hasOwnProperty.call(update, 'whatsapp_tracking_status') && !['inactive', 'active', 'completed', 'archived'].includes(update.whatsapp_tracking_status)) {
       return NextResponse.json({ error: 'Status de acompanhamento do WhatsApp inválido.' }, { status: 400 });
     }
