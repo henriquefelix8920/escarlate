@@ -239,3 +239,23 @@
 .whatsapp-invalid-action { color: #8a3940; }
 .whatsapp-verify-action:disabled,
 .whatsapp-invalid-action:disabled { opacity: .55; cursor: wait; }
+
+
+/* Buscador independente para extrair números dos leads encontrados */
+.phone-export-panel{margin-bottom:28px;padding:22px;background:linear-gradient(145deg,rgba(37,211,102,.055),var(--crm-panel) 42%);border:1px solid rgba(53,201,139,.28);border-radius:16px}
+.phone-export-icon{display:grid;place-items:center;width:42px;height:42px;border:1px solid rgba(53,201,139,.3);border-radius:12px;background:rgba(37,211,102,.1);color:#78e6a2;font-size:1.35rem}
+.phone-export-submit{background:#188b55}
+.phone-export-submit:hover{background:#1da566}
+.phone-export-status{margin-top:14px;padding:11px 13px;border:1px solid rgba(53,201,139,.25);border-radius:9px;background:rgba(53,201,139,.08);color:#a5eac4;font-size:.76rem;line-height:1.45}
+.phone-export-result{display:grid;gap:10px;margin-top:14px;padding:14px;border:1px solid rgba(53,201,139,.2);border-radius:12px;background:#0b0e14}
+.phone-export-result-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.phone-export-result-heading>div{display:grid;gap:4px}
+.phone-export-result-heading strong{font-size:.8rem;color:#e7f7ed}
+.phone-export-result-heading span{font-size:.68rem;color:#8d9a91}
+.phone-export-result textarea{width:100%;min-height:96px;resize:vertical;padding:12px;border:1px solid #2d4938;border-radius:9px;background:#080b10;color:#b7f1cb;font:inherit;font-size:.82rem;line-height:1.6;overflow-wrap:anywhere}
+.phone-export-result textarea::placeholder{color:#68786e}
+.phone-export-copy{flex:0 0 auto;border:1px solid rgba(53,201,139,.5);border-radius:9px;padding:10px 14px;background:rgba(53,201,139,.15);color:#90e8b5;font:inherit;font-size:.74rem;font-weight:800;cursor:pointer}
+.phone-export-copy:hover:not(:disabled){background:rgba(53,201,139,.23)}
+.phone-export-copy:disabled{opacity:.45;cursor:not-allowed}
+.phone-export-feedback{color:#9be8c3;font-size:.7rem}
+@media(max-width:600px){.phone-export-panel{padding:16px}.phone-export-result-heading{align-items:stretch;flex-direction:column}.phone-export-copy{width:100%}}
