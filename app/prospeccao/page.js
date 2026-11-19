@@ -57,9 +57,10 @@ async function readJson(response) {
 }
 const whatsapp = (phone) => {
   let value = digits(phone);
-  if (value.length < 10) return null;
-  if (!value.startsWith('55')) value = '55' + value;
-  return 'https://wa.me/' + value;
+  if (value.startsWith('55') && value.length === 13) value = value.slice(2);
+  // Only Brazilian mobile numbers (DDD + 9 + eight digits) are eligible.
+  if (value.length !== 11 || value[2] !== '9') return null;
+  return 'https://wa.me/55' + value;
 };
 
 export default function ProspeccaoPage() {
@@ -416,7 +417,7 @@ export default function ProspeccaoPage() {
         </section>
 
         <section id="captura" className="capture-panel">
-          <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Encontre profissionais sem site próprio e com telefone público para iniciar a conversa pelo WhatsApp.</p></div><span className="capture-icon">⌕</span></div>
+          <div className="capture-heading"><div><span className="eyebrow">PROSPECÇÃO AUTOMÁTICA</span><h2>Encontrar novos clientes</h2><p>Encontre profissionais sem site próprio e com celular público para verificar o WhatsApp antes da abordagem.</p></div><span className="capture-icon">⌕</span></div>
           <form onSubmit={startSearch} className="prospect-form">
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: médicas, nutricionistas" minLength={2} required /></label>
             <label>Região / cidade<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex.: Minas Gerais ou Frutal, MG" minLength={2} required /></label>
@@ -434,15 +435,15 @@ export default function ProspeccaoPage() {
                 <span><b>{jobProgress.scanned || 0}</b> analisadas de <b>{jobProgress.candidates || 0}</b> encontradas</span>
                 <span><b>{jobProgress.saved || 0}</b> leads salvos</span>
                 <span><b>{jobProgress.with_website || 0}</b> descartadas por já terem site</span>
-                <span><b>{jobProgress.with_whatsapp || 0}</b> com telefone para WhatsApp</span>
-                <span><b>{jobProgress.without_whatsapp || 0}</b> sem telefone válido</span>
+                <span><b>{jobProgress.with_mobile || 0}</b> com celular móvel (WhatsApp não verificado)</span>
+                <span><b>{jobProgress.without_mobile || 0}</b> sem celular móvel válido</span>
                 <span><b>{jobProgress.duplicates || 0}</b> duplicadas</span>
                 <span><b>{jobProgress.errors || 0}</b> com erro</span>
               </div>
             </> : <span>{job.message || job.error || 'Coletando empresas e verificando sites…'}</span>}
             {job.found_count !== undefined && !jobProgress && <span>{job.found_count} novos leads salvos</span>}
           </div>}
-          <p className="prospect-hint">A busca começa pelo Google Maps e descarta negócios com site institucional. Só salva profissionais cujo telefone público tenha formato compatível com WhatsApp. O número vem do Google Maps; o sistema não consegue confirmar se ele possui WhatsApp ativo. Os resultados ficam em Leads sem site para você conferir e abordar manualmente.</p>
+          <p className="prospect-hint">A busca começa pelo Google Maps e descarta negócios com site institucional. Só salva profissionais com celular brasileiro em formato móvel (DDD + 9 dígitos). Isso não confirma que o número tenha WhatsApp: a confirmação é manual, após abrir a conversa e verificar a conta. Os resultados ficam em Leads sem site para você conferir e abordar manualmente.</p>
         </section>
 
         <section id="leads" className="leads-section">
@@ -455,7 +456,10 @@ export default function ProspeccaoPage() {
               visible.map((lead) => {
                 const wa = whatsapp(lead.phone);
                 return <article id={'lead-' + lead.id} className="prospect-lead" key={lead.id}>
-                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (wa ? 'has-social' : 'no-social')}>{wa ? 'Sem site · com WhatsApp' : 'Sem site · sem WhatsApp válido'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}</div><div className="lead-actions">{wa && <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onWhatsAppActivity={registerWhatsAppActivity} triggerLabel="Assistente WhatsApp" />} {!wa && <span className="no-phone">Sem número válido para abrir no WhatsApp.</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
+                  <div className="lead-main"><div className="lead-name-row"><h3>{lead.name}</h3><span className={'stage-badge stage-' + lead.status}>{stages.find(([value]) => value === lead.status)?.[1] || 'Novo'}</span><span className={'site-presence-badge ' + (wa ? 'has-social' : 'no-social')}>{wa ? (lead.whatsapp_number_status === 'confirmed' ? 'WhatsApp confirmado' : 'Celular · WhatsApp não verificado') : 'Sem site · sem celular válido'}</span></div><p>{[lead.category, lead.city || lead.address].filter(Boolean).join(' · ') || 'Categoria não informada'}</p><div className="lead-links">{lead.phone && <span>☎ {lead.phone}</span>}{lead.email && <span>✉ {lead.email}</span>}{lead.google_maps_url && <a href={lead.google_maps_url} target="_blank" rel="noreferrer">Ver no Maps ↗</a>}</div><div className="lead-actions">{wa && <WhatsAppSequenceAssistant lead={lead} whatsappUrl={wa} onWhatsAppActivity={registerWhatsAppActivity} triggerLabel={lead.whatsapp_number_status === 'confirmed' ? 'Assistente WhatsApp' : 'Abrir WhatsApp para conferir'} />}
+                    {wa && lead.whatsapp_number_status !== 'confirmed' && <><button type="button" className="whatsapp-verify-action" disabled={!!saving[lead.id]} onClick={() => updateLead(lead.id, { whatsapp_number_status: 'confirmed' })}>Confirmar WhatsApp</button><button type="button" className="whatsapp-invalid-action" disabled={!!saving[lead.id]} onClick={() => updateLead(lead.id, { whatsapp_number_status: 'not_whatsapp' })}>Não é WhatsApp</button></>}
+                    {wa && lead.whatsapp_number_status === 'confirmed' && <button type="button" className="whatsapp-invalid-action" disabled={!!saving[lead.id]} onClick={() => updateLead(lead.id, { whatsapp_number_status: 'not_whatsapp' })}>Marcar como inválido</button>}
+                    {!wa && <span className="no-phone">Sem celular brasileiro válido para abrir no WhatsApp.</span>}<button type="button" className="delete-lead-action" disabled={!!saving[lead.id]} onClick={() => deleteLead(lead)}>{saving[lead.id] ? 'Aguarde…' : 'Excluir lead'}</button></div></div>
                   <div className="lead-controls"><label>Etapa comercial<select value={lead.status || 'new'} onChange={(e) => updateLead(lead.id, { status: e.target.value })}>{stages.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Valor do negócio (R$)<input key={lead.id + '-value-' + (lead.deal_value || 0)} type="number" min="0" step="0.01" defaultValue={lead.deal_value || ''} placeholder="Ex.: 2500" onBlur={(e) => { const value = e.target.value === '' ? 0 : Number(e.target.value); if (value !== Number(lead.deal_value || 0)) updateLead(lead.id, { deal_value: value }); }} /></label><label>Observações<textarea key={lead.id + '-notes-' + (lead.notes || '')} defaultValue={lead.notes || ''} placeholder="Histórico, retorno combinado, detalhes..." onBlur={(e) => { if (e.target.value !== (lead.notes || '')) updateLead(lead.id, { notes: e.target.value }); }} /></label><small className="save-state">{saving[lead.id] ? 'Salvando…' : 'Alterações salvas ao sair do campo'}</small></div>
                 </article>;
               })
