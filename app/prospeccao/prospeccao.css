@@ -220,3 +220,22 @@
 @media(max-width:720px){.conversation-tab-heading{align-items:stretch;flex-direction:column}.conversation-tab-toggle{width:100%}}
 
 @media(max-width:720px){.crm-sidebar a[href="/radar-instagram"]{display:flex;grid-column:1/-1;margin:0;padding:10px 12px;background:rgba(214,64,145,.1);color:#ff9bce}}
+
+
+/* Verificação manual do número de WhatsApp */
+.whatsapp-verify-action,
+.whatsapp-invalid-action {
+  border: 1px solid #d8dce4;
+  border-radius: 8px;
+  padding: 8px 11px;
+  background: #fff;
+  color: #344054;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.whatsapp-verify-action { border-color: #b7dfc5; color: #176b3a; }
+.whatsapp-invalid-action { color: #8a3940; }
+.whatsapp-verify-action:disabled,
+.whatsapp-invalid-action:disabled { opacity: .55; cursor: wait; }
