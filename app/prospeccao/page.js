@@ -55,13 +55,18 @@ async function readJson(response) {
   try { return JSON.parse(text); }
   catch { throw new Error(`O servidor retornou uma resposta inválida (HTTP ${response.status}). Tente novamente.`); }
 }
-const whatsapp = (phone, verificationStatus) => {
+const exportMobileNumber = (phone, verificationStatus) => {
   if (verificationStatus === 'not_whatsapp') return null;
   let value = digits(phone);
   if (value.startsWith('55') && value.length === 13) value = value.slice(2);
-  // Only Brazilian mobile numbers (DDD + 9 + eight digits) are eligible.
+  // Mantém apenas celulares brasileiros no formato DDD + 9 dígitos.
   if (value.length !== 11 || value[2] !== '9') return null;
-  return 'https://wa.me/55' + value;
+  return '55' + value;
+};
+
+const whatsapp = (phone, verificationStatus) => {
+  const value = exportMobileNumber(phone, verificationStatus);
+  return value ? 'https://wa.me/' + value : null;
 };
 
 export default function ProspeccaoPage() {
@@ -78,6 +83,14 @@ export default function ProspeccaoPage() {
   const [filter, setFilter] = useState('all');
   const [saving, setSaving] = useState({});
   const [contactedToday, setContactedToday] = useState(0);
+  const [phoneSearchCity, setPhoneSearchCity] = useState('');
+  const [phoneSearchCategory, setPhoneSearchCategory] = useState('médicas');
+  const [phoneSearchLoading, setPhoneSearchLoading] = useState(false);
+  const [phoneSearchStatus, setPhoneSearchStatus] = useState('');
+  const [phoneNumbersText, setPhoneNumbersText] = useState('');
+  const [phoneNumberCount, setPhoneNumberCount] = useState(0);
+  const [phoneCopyFeedback, setPhoneCopyFeedback] = useState('');
+  const phoneSearchSession = useRef(null);
   const lastLoadedFoundCount = useRef(0);
   const lastObservedJobId = useRef("");
 
@@ -86,9 +99,11 @@ export default function ProspeccaoPage() {
       const response = await fetch('/api/leads', { cache: 'no-store' });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data.error || 'Falha ao carregar CRM.');
-      setLeads(data.leads || []);
+      const nextLeads = data.leads || [];
+      setLeads(nextLeads);
       setError('');
-    } catch (err) { setError(err.message); }
+      return nextLeads;
+    } catch (err) { setError(err.message); return null; }
   }, []);
 
   useEffect(() => { loadLeads(); }, [loadLeads]);
@@ -167,7 +182,25 @@ export default function ProspeccaoPage() {
       }
       if (currentJob && ['completed', 'failed', 'cancelled'].includes(currentJob.status) && lastLoadedTerminalJob.current !== currentJob.id) {
         lastLoadedTerminalJob.current = currentJob.id;
-        await loadLeads();
+        const refreshedLeads = await loadLeads();
+        const exportSession = phoneSearchSession.current;
+        if (exportSession?.jobId === currentJob.id) {
+          const candidates = (refreshedLeads || []).filter((lead) =>
+            !exportSession.initialLeadIds.has(lead.id)
+            && (!String(lead.website || '').trim() || isSocialWebsite(lead.website))
+          );
+          const numbers = [...new Set(candidates.map((lead) => exportMobileNumber(lead.phone, lead.whatsapp_number_status)).filter(Boolean))];
+          setPhoneNumbersText(numbers.join(', '));
+          setPhoneNumberCount(numbers.length);
+          setPhoneCopyFeedback('');
+          setPhoneSearchStatus(
+            currentJob.status === 'completed'
+              ? `Busca concluída: ${numbers.length} número(s) encontrado(s) nesta execução.`
+              : `Busca ${currentJob.status === 'cancelled' ? 'interrompida' : 'finalizada com falha'}: ${numbers.length} número(s) recuperado(s) dos leads salvos.`,
+          );
+          phoneSearchSession.current = null;
+          setPhoneSearchLoading(false);
+        }
       }
     } catch (err) {
       // Uma falha temporária de consulta não interrompe o acompanhamento da pesquisa.
@@ -183,6 +216,8 @@ export default function ProspeccaoPage() {
 
   async function startSearch(event) {
     event.preventDefault();
+    phoneSearchSession.current = null;
+    setPhoneSearchLoading(false);
     setError('');
     setLoading(true);
     setJob(null);
@@ -198,6 +233,64 @@ export default function ProspeccaoPage() {
     } catch (err) { setError(err.message); setLoading(false); }
   }
 
+
+  async function startPhoneSearch(event) {
+    event.preventDefault();
+    if (loading || phoneSearchLoading) return;
+    setError('');
+    setLoading(true);
+    setPhoneSearchLoading(true);
+    setJob(null);
+    lastLoadedFoundCount.current = 0;
+    lastObservedJobId.current = '';
+    phoneSearchSession.current = null;
+    setPhoneSearchStatus('Preparando o buscador de números...');
+    setPhoneNumbersText('');
+    setPhoneNumberCount(0);
+    setPhoneCopyFeedback('');
+
+    try {
+      const existingResponse = await fetch('/api/leads', { cache: 'no-store' });
+      const existingData = await readJson(existingResponse);
+      if (!existingResponse.ok) throw new Error(existingData.error || 'Não foi possível preparar a lista atual de leads.');
+      const initialLeads = existingData.leads || [];
+      setLeads(initialLeads);
+      const initialLeadIds = new Set(initialLeads.map((lead) => lead.id));
+
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          city: capitalizeCity(phoneSearchCity),
+          category: phoneSearchCategory.trim(),
+          limit: Number(limit),
+          channel: 'whatsapp',
+        }),
+      });
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data.detail || data.error || 'Não foi possível iniciar a busca de números.');
+      if (!data?.id) throw new Error('A pesquisa foi iniciada, mas o servidor não retornou o identificador da tarefa.');
+
+      phoneSearchSession.current = { jobId: data.id, initialLeadIds };
+      setPhoneSearchStatus('Busca em andamento. Os números aparecerão aqui quando a pesquisa terminar.');
+      setJob({ ...data, status: data.status || 'queued' });
+    } catch (err) {
+      setPhoneSearchStatus(`Não foi possível concluir a busca: ${err.message}`);
+      setError(err.message);
+      setLoading(false);
+      setPhoneSearchLoading(false);
+    }
+  }
+
+  async function copyPhoneNumbers() {
+    if (!phoneNumbersText) return;
+    try {
+      await navigator.clipboard.writeText(phoneNumbersText);
+      setPhoneCopyFeedback(`${phoneNumberCount} número(s) copiado(s).`);
+    } catch {
+      setPhoneCopyFeedback('Não foi possível copiar automaticamente. Selecione o conteúdo do campo e copie manualmente.');
+    }
+  }
 
   async function cancelSearch() {
     if (!job?.id || !loading) return;
@@ -422,7 +515,7 @@ export default function ProspeccaoPage() {
           <form onSubmit={startSearch} className="prospect-form">
             <label>Segmento<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ex.: médicas, nutricionistas" minLength={2} required /></label>
             <label>Região / cidade<input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex.: Minas Gerais ou Frutal, MG" minLength={2} required /></label>
-            <div className="prospect-actions"><button className="prospect-submit" disabled={loading}>{loading ? 'Pesquisando…' : '◎ Buscar leads com WhatsApp'}</button>{loading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
+            <div className="prospect-actions"><button className="prospect-submit" disabled={loading || phoneSearchLoading}>{loading && !phoneSearchLoading ? 'Pesquisando…' : '◎ Buscar leads com WhatsApp'}</button>{loading && !phoneSearchLoading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}</div>
           </form>
           <div className="shared-job-heading"><strong>ACOMPANHAMENTO DA PESQUISA</strong><span>Sincronizado automaticamente entre seus aparelhos</span></div>
           {!job && <div className="job-status job-idle"><strong>Nenhuma pesquisa registrada</strong><span>Quando uma pesquisa for iniciada em qualquer aparelho, o andamento aparecerá aqui.</span></div>}
@@ -445,6 +538,28 @@ export default function ProspeccaoPage() {
             {job.found_count !== undefined && !jobProgress && <span>{job.found_count} novos leads salvos</span>}
           </div>}
           <p className="prospect-hint">A busca começa pelo Google Maps e descarta negócios com site institucional. Só salva profissionais com celular brasileiro em formato móvel (DDD + 9 dígitos). Isso não confirma que o número tenha WhatsApp: a confirmação é manual, após abrir a conversa e verificar a conta. Os resultados ficam em Leads sem site para você conferir e abordar manualmente.</p>
+        </section>
+
+        <section id="extrair-telefones" className="phone-export-panel">
+          <div className="capture-heading">
+            <div><span className="eyebrow">BUSCADOR DE NÚMEROS</span><h2>Extrair telefones dos novos leads</h2><p>Uma busca independente, usando os mesmos critérios do buscador principal.</p></div>
+            <span className="phone-export-icon" aria-hidden="true">☎</span>
+          </div>
+          <form onSubmit={startPhoneSearch} className="prospect-form phone-export-form">
+            <label>Segmento<input value={phoneSearchCategory} onChange={(event) => setPhoneSearchCategory(event.target.value)} placeholder="Ex.: médicas, nutricionistas" minLength={2} required /></label>
+            <label>Região / cidade<input value={phoneSearchCity} onChange={(event) => setPhoneSearchCity(event.target.value)} placeholder="Ex.: Minas Gerais ou Frutal, MG" minLength={2} required /></label>
+            <div className="prospect-actions">
+              <button className="prospect-submit phone-export-submit" disabled={loading || phoneSearchLoading}>{phoneSearchLoading ? 'Buscando números…' : '⌕ Buscar e extrair números'}</button>
+              {phoneSearchLoading && <button type="button" className="prospect-cancel" disabled={job?.status === 'cancelling'} onClick={cancelSearch}>{job?.status === 'cancelling' ? 'Parando…' : '■ Parar busca'}</button>}
+            </div>
+          </form>
+          <p className="prospect-hint">A busca usa a mesma captura do Google Maps e os mesmos filtros do buscador principal. O resultado inclui somente leads novos salvos nesta execução, com celular brasileiro em formato móvel. O formato do número não confirma que exista uma conta WhatsApp ativa.</p>
+          {phoneSearchStatus && <div className="phone-export-status" role="status">{phoneSearchStatus}</div>}
+          <div className="phone-export-result">
+            <div className="phone-export-result-heading"><div><strong>Números encontrados</strong><span>{phoneNumberCount} número(s) · formato internacional sem símbolos</span></div><button type="button" className="phone-export-copy" onClick={copyPhoneNumbers} disabled={!phoneNumbersText}>Copiar números</button></div>
+            <textarea aria-label="Números encontrados separados por vírgula" readOnly value={phoneNumbersText} placeholder="Os números encontrados nesta busca aparecerão aqui, separados por vírgula." rows={4} />
+            {phoneCopyFeedback && <span className="phone-export-feedback" role="status">{phoneCopyFeedback}</span>}
+          </div>
         </section>
 
         <section id="leads" className="leads-section">
