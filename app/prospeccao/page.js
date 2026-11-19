@@ -432,6 +432,7 @@ export default function ProspeccaoPage() {
         <a className="nav-item" href="#leads">◉ <span>Leads</span><b>{noSite.length}</b></a>
         <a className="nav-item nav-item-conversations" href="#whatsapp-pipeline">◷ <span>Conversas em andamento</span><b>{activeConversations.length}</b></a>
         <a className="nav-item" href="#captura">⌕ <span>Prospecção</span></a>
+        <a className="nav-item" href="#extrair-telefones">☎ <span>Extrair telefones</span></a>
         <div className="sidebar-bottom"><span className="status-dot" /> CRM conectado</div>
       </aside>
 
