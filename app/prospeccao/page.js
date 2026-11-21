@@ -417,13 +417,13 @@ export default function ProspeccaoPage() {
   // Exporta apenas registros inseridos a partir de fontes próprias/importadas.
   // Leads originados do Google Maps (inclusive os que tenham a URL removida)
   // permanecem fora da exportação.
-  const exportableLeads = useMemo(() => leads.filter((lead) => {
+  const exportableLeads = useMemo(() => noSite.filter((lead) => {
     const source = String(lead.source || '').trim().toLowerCase();
     const allowedSource = ['csv', 'manual', 'user_provided', 'own_database'].includes(source);
     const mapsOrigin = source.startsWith('google_maps') || Boolean(String(lead.google_maps_url || '').trim());
     return allowedSource && !mapsOrigin && Boolean(String(lead.name || '').trim())
       && Boolean(exportMobileNumber(lead.phone, lead.whatsapp_number_status));
-  }), [leads]);
+  }), [noSite]);
 
   function exportLeadsForExcel() {
     if (!exportableLeads.length) return;
@@ -440,7 +440,7 @@ export default function ProspeccaoPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'leads-fontes-proprias-wpp.csv';
+    link.download = 'leads-sem-site-fontes-autorizadas.csv';
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -597,7 +597,7 @@ export default function ProspeccaoPage() {
         </section>
 
         <section id="leads" className="leads-section">
-          <div className="leads-heading"><div><span className="eyebrow">SEU FUNIL COMERCIAL</span><h2>Leads sem site</h2><p>Empresas que podem precisar de um site profissional.</p></div><div className="leads-heading-actions"><span className="lead-total">{visible.length} exibidos</span><button type="button" className="lead-export-button" onClick={exportLeadsForExcel} disabled={!exportableLeads.length} title="Exporta somente leads com origem CSV/manual/própria; registros do Google Maps ficam excluídos.">Baixar planilha para Excel ({exportableLeads.length})</button></div></div>
+          <div className="leads-heading"><div><span className="eyebrow">SEU FUNIL COMERCIAL</span><h2>Leads sem site</h2><p>Empresas que podem precisar de um site profissional.</p></div><div className="leads-heading-actions"><span className="lead-total">{visible.length} exibidos</span><button type="button" className="lead-export-button" onClick={exportLeadsForExcel} disabled={!exportableLeads.length} title="Exporta somente leads com origem CSV/manual/própria; registros do Google Maps ficam excluídos.">Exportar leads para Excel ({exportableLeads.length})</button></div></div>
           <p className="lead-export-note">A planilha contém Nome e Telefone, em CSV compatível com Excel e com o importador WPPConnect. Só entram registros identificados como CSV, manual, base própria ou fornecidos pelo usuário; dados oriundos do Google Maps são excluídos.</p>
           <div className="lead-toolbar"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="⌕  Buscar por empresa, telefone ou cidade..." /><div className="lead-filters">
             {[['all','Todos'],['pending','Novos'],['whatsapp_uncontacted',`WhatsApp sem contato (${whatsappUncontacted.length})`],['contacted','Contatados'],['follow_up','Follow-up'],['interested','Interessados'],['proposal','Propostas'],['won','Fechados'],['lost','Perdidos']].map(([value,label]) => <button key={value} className={filter === value ? 'filter-active' : ''} onClick={() => setFilter(value)}>{label}</button>)}
