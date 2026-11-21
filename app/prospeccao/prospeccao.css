@@ -222,6 +222,13 @@
 @media(max-width:720px){.crm-sidebar a[href="/radar-instagram"]{display:flex;grid-column:1/-1;margin:0;padding:10px 12px;background:rgba(214,64,145,.1);color:#ff9bce}}
 
 
+.leads-heading-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.lead-export-button{border:1px solid rgba(53,201,139,.48);border-radius:9px;padding:10px 13px;background:rgba(53,201,139,.13);color:#8be5b8;font:inherit;font-size:.72rem;font-weight:800;cursor:pointer}
+.lead-export-button:hover:not(:disabled){background:rgba(53,201,139,.2)}
+.lead-export-button:disabled{opacity:.45;cursor:not-allowed}
+.lead-export-note{margin:-12px 0 14px;color:var(--crm-muted);font-size:.68rem;line-height:1.55}
+@media(max-width:600px){.leads-heading-actions{width:100%;justify-content:space-between}.lead-export-button{flex:1}}
+
 /* Verificação manual do número de WhatsApp */
 .whatsapp-verify-action,
 .whatsapp-invalid-action {
